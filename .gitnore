@@ -1,0 +1,7 @@
+/target
+.ctx/*
+!.ctx/config.toml
+**/.DS_Store
+.vscode
+.idea
+*.swp
