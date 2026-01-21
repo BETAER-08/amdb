@@ -16,15 +16,6 @@ _The Open Standard for AI Context Memory_
 
 ## 📐 The Missing Pillar
 
-In modern software engineering, we have solved Version Control and Environment Consistency. usage context is the final frontier.
-
-| System | **Git** | **Docker** | **.CTX** |
-| :--- | :--- | :--- | :--- |
-| **Domain** | Source Code (Time) | Environment (Space) | **Context (Meaning)** |
-| **Unit** | Commits / Diffs | Containers / Images | **Semantic Tokens** |
-| **Problem** | "Who changed what?" | "It works on my machine" | **"What does this code do?"** |
-| **Result** | History Safety | Reproducibility | **Self-Explaining Codebase** |
-
 **.CTX** (pronounced "dot-context") is a local daemon that turns any project into a self-explaining entity. It ensures that every AI tool—whether it's GitHub Copilot, Cursor, or a local LLM—shares a single, unified understanding of your codebase.
 
 ## 🚀 Why .CTX?
