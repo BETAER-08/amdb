@@ -1,10 +1,10 @@
 [package]
-name = "ctx"
+name = "amdb"
 version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "ctx"
+name = "amdb"
 path = "src/main.rs"
 
 [dependencies]

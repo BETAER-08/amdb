@@ -81,7 +81,7 @@ fn handle_initialize() -> Result<Value, JsonRpcError> {
             "resources": {} 
         },
         "serverInfo": {
-            "name": "ctx-mcp",
+            "name": "amdb-mcp",
             "version": "0.1.0"
         }
     }))
@@ -90,7 +90,7 @@ fn handle_initialize() -> Result<Value, JsonRpcError> {
 fn handle_list_resources() -> Result<Value, JsonRpcError> {
     let resources = json!([
         {
-            "uri": "ctx://context_summary",
+            "uri": "amdb://context_summary",
             "name": "Project Context Summary",
             "description": "Global summary of the project structure"
         }
@@ -104,15 +104,15 @@ fn handle_read_resource(params: Option<Value>) -> Result<Value, JsonRpcError> {
         .and_then(|v| v.as_str().map(|s| s.to_string()))
         .ok_or(JsonRpcError { code: -32602, message: "Missing uri parameter".into() })?;
 
-    if !uri.starts_with("ctx://") {
+    if !uri.starts_with("amdb://") {
         return Err(JsonRpcError { code: -32602, message: "Invalid URI scheme".into() });
     }
 
-    let file_path = uri.replace("ctx://", ""); 
+    let file_path = uri.replace("amdb://", ""); 
     
-    let ctx_path = std::path::Path::new(".ctx");
-    let db = ContextDb::open(ctx_path).map_err(|_| JsonRpcError { 
-        code: -32000, message: "Failed to open .ctx/store.db".into() 
+    let amdb_path = std::path::Path::new(".amdb");
+    let db = ContextDb::open(amdb_path).map_err(|_| JsonRpcError { 
+        code: -32000, message: "Failed to open .amdb/store.db".into() 
     })?;
 
     let symbols = db.get_symbols(&file_path).unwrap_or_default();

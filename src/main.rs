@@ -16,7 +16,7 @@ use daemon::mcp;
 use core::indexer::Indexer; 
 
 #[derive(Parser)]
-#[command(name = "ctx", version = "0.1", about = "The Context Protocol: Open Standard for AI Context Memory")]
+#[command(name = "amdb", version = "0.1", about = "The Context Protocol: Open Standard for AI Context Memory")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -63,7 +63,7 @@ async fn main() -> Result<()> {
 
         Commands::Daemon { cmd } => match cmd {
             DaemonCommands::Start => {
-                println!("{}", style("Starting .CTX Daemon (HTTP Server)...").green().bold());
+                println!("{}", style("Starting .amdb Daemon (HTTP Server)...").green().bold());
                 println!("Supported Integration: Custom Agents, Postman, Curl");
                 handle_daemon_start().await?
             }
@@ -71,7 +71,7 @@ async fn main() -> Result<()> {
 
         Commands::Mcp { cmd } => match cmd {
             McpCommands::Start => {
-                eprintln!("Starting .CTX MCP Server (Stdio Mode)...");
+                eprintln!("Starting .amdb MCP Server (Stdio Mode)...");
                 mcp::run_stdio_server()?;
             }
         },
@@ -82,7 +82,7 @@ async fn main() -> Result<()> {
 }
 
 fn handle_init() -> Result<()> {
-    let path = Path::new(".ctx");
+    let path = Path::new(".amdb");
     if path.exists() {
         println!("{}", style("Already initialized").yellow());
         Indexer::scan_project(".")?;
@@ -95,10 +95,10 @@ fn handle_init() -> Result<()> {
 
     fs::write(path.join("config.toml"), "version = \"0.1\"\n[ignore]\npatterns = [\"target\", \".git\"]")?;
     
-    println!("{}", style("Initialized .ctx project").green());
-    println!("  - Created .ctx/ directory");
-    println!("  - Created .ctx/store.db (via SQLite)");
-    println!("  - Created .ctx/vector/ (for Semantic Search)");
+    println!("{}", style("Initialized .amdb project").green());
+    println!("  - Created .amdb/ directory");
+    println!("  - Created .amdb/store.db (via SQLite)");
+    println!("  - Created .amdb/vector/ (for Semantic Search)");
 
     Indexer::scan_project(".")?;
     
@@ -106,14 +106,14 @@ fn handle_init() -> Result<()> {
 }
 
 fn handle_status() -> Result<()> {
-    let path = Path::new(".ctx");
+    let path = Path::new(".amdb");
     if path.exists() {
         println!("{}", style("Status: Active").green().bold());
 
         let db_path = path.join("store.db");
         if db_path.exists() {
             println!("Context Store: {}", style("Connected").cyan());
-            println!("DB Location: .ctx/store.db");
+            println!("DB Location: .amdb/store.db");
         } else {
             println!("Context Store: {}", style("Empty (Run daemon to index)").yellow());
         }
@@ -121,7 +121,7 @@ fn handle_status() -> Result<()> {
         println!("Protocol Version: 0.1");
     } else {
         println!("{}", style("Status: Not Initialized").red());
-        println!("Run 'ctx init' to start.");
+        println!("Run 'amdb init' to start.");
     }
     Ok(())
 }
@@ -155,12 +155,12 @@ fn handle_parse(file_path: &str) -> Result<()> {
     let mut parser = CodeParser::new(lang)?;
     let (symbols, graph, _) = parser.parse(file_path, &content)?;
     
-    let ctx_path = Path::new(".ctx");
-    if !ctx_path.exists() {
-        return Err(anyhow::anyhow!("Project not initialized. Run 'ctx init' first."));
+    let amdb_path = Path::new(".amdb");
+    if !amdb_path.exists() {
+        return Err(anyhow::anyhow!("Project not initialized. Run 'amdb init' first."));
     }
 
-    let mut db = ContextDb::open(ctx_path)?;
+    let mut db = ContextDb::open(amdb_path)?;
     db.save_symbols(file_path, &symbols)?;
     db.save_relationships(file_path, &graph)?;
     

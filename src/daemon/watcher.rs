@@ -29,7 +29,7 @@ impl SystemWatcher {
                     for path in event.paths {
                         let path_str = path.to_string_lossy().to_string();
 
-                        if path_str.contains("/target/") || path_str.contains("/.git/") || path_str.contains(".ctx") {
+                        if path_str.contains("/target/") || path_str.contains("/.git/") || path_str.contains(".amdb") {
                             continue;
                         }
 
@@ -72,8 +72,8 @@ impl SystemWatcher {
         
         let (symbols, graph) = parser.parse(file_path, &content)?;
 
-        let ctx_path = Path::new(".ctx");
-        let mut db = ContextDb::open(ctx_path)?;
+        let amdb_path = Path::new(".amdb");
+        let mut db = ContextDb::open(amdb_path)?;
         
         db.save_symbols(file_path, &symbols)?;
         db.save_relationships(file_path, &graph)?;

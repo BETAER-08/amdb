@@ -1,6 +1,6 @@
 <div align="center">
 
-# .CTX
+# .amdb
 
 **The Context Protocol**
 <br>
@@ -16,15 +16,15 @@ _The Open Standard for AI Context Memory_
 
 ## 📐 The Missing Pillar
 
-**.CTX** (pronounced "dot-context") is a local daemon that turns any project into a self-explaining entity. It ensures that every AI tool—whether it's GitHub Copilot, Cursor, or a local LLM—shares a single, unified understanding of your codebase.
+**.amdb** (pronounced "dot-context") is a local daemon that turns any project into a self-explaining entity. It ensures that every AI tool—whether it's GitHub Copilot, Cursor, or a local LLM—shares a single, unified understanding of your codebase.
 
-## 🚀 Why .CTX?
+## 🚀 Why .amdb?
 
 **The Problem: Siloed Intelligence**
 Every new AI tool you use re-indexes your code from scratch. They are strangers to your project, guessing context based on open files or naive text chunking. They don't talk to each other, and they forget everything when you close the session.
 
 **The Solution: A Shared Protocol**
-`.CTX` runs locally, watching your file system. It proactively parses code, understands dependencies, and maintains a high-fidelity context map in a standardized `.ctx/` directory.
+`.amdb` runs locally, watching your file system. It proactively parses code, understands dependencies, and maintains a high-fidelity context map in a standardized `.amdb/` directory.
 - **Write Once:** Your context is calculated once.
 - **Read Everywhere:** Exposed via **MCP (Model Context Protocol)** to any supported editor or agent.
 
@@ -37,13 +37,13 @@ graph LR
     FS[File System] -->|Notify| Watcher
     Watcher -->|Diff| Parser[Tree-sitter Parser]
     Parser -->|AST| Engine
-    Engine -->|Embeddings| DB[(.ctx/store.db)]
+    Engine -->|Embeddings| DB[(.amdb/store.db)]
     DB -->|Query| MCPServer[MCP Server]
     MCPServer -->|JSON-RPC| Client[Cursor / Claude / Copilot]
 ```
 
 ### Folder Structure
-The `.ctx` folder acts as the brain of your repository:
+The `.amdb` folder acts as the brain of your repository:
 - `config.toml`: Protocol settings (ignore patterns, language policies).
 - `store.db`: SQLite database storing semantic relationships and symbols.
 - `vector/`: Local vector store for semantic search.
@@ -53,40 +53,40 @@ The `.ctx` folder acts as the brain of your repository:
 ### Installation
 (Assuming crate publication)
 ```bash
-cargo install ctx
+cargo install amdb
 ```
 
 ### Initialization
 Turn your current directory into a Context-Aware project:
 ```bash
-ctx init
+amdb init
 ```
-This creates the `.ctx` skeleton and begins the initial indexing process.
+This creates the `.amdb` skeleton and begins the initial indexing process.
 
 ### Usage
 Start the background daemon to keep context in sync:
 ```bash
-ctx daemon start
+amdb daemon start
 ```
 
 Check the status of the context index:
 ```bash
-ctx status
+amdb status
 ```
 
 ## 🔌 Integration
 
 ### Cursor / VS Code
-`.CTX` generates a dynamic `.cursorrules` file or exposes a local server that Cursor allows you to hook into, providing "God-mode" context awarness without uploading your code to the cloud.
+`.amdb` generates a dynamic `.cursorrules` file or exposes a local server that Cursor allows you to hook into, providing "God-mode" context awarness without uploading your code to the cloud.
 
 ### Claude Desktop
-Configure your `claude_desktop_config.json` to use the locally running .CTX MCP server:
+Configure your `claude_desktop_config.json` to use the locally running .amdb MCP server:
 
 ```json
 {
   "mcpServers": {
-    "ctx": {
-      "command": "ctx",
+    "amdb": {
+      "command": "amdb",
       "args": ["mcp", "start"]
     }
   }

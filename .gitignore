@@ -1,6 +1,6 @@
 /target
-.ctx/*
-!.ctx/config.toml
+.amdb/*
+!.amdb/config.toml
 **/.DS_Store
 .vscode
 .idea

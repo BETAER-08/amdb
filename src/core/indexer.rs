@@ -11,8 +11,8 @@ impl Indexer {
     pub fn scan_project(root: &str) -> anyhow::Result<()> {
         println!("{}", style("🔍 Starting initial project scan...").cyan().bold());
 
-        let ctx_path = Path::new(".ctx");
-        let mut db = match ContextDb::open(ctx_path) {
+        let amdb_path = Path::new(".amdb");
+        let mut db = match ContextDb::open(amdb_path) {
             Ok(db) => db,
             Err(_) => {
                 eprintln!("Context DB not found. Skipping index.");
@@ -55,5 +55,5 @@ impl Indexer {
 
 fn is_ignored(entry: &walkdir::DirEntry) -> bool {
     let name = entry.file_name().to_string_lossy();
-    name == ".ctx" || name == ".git" || name == "target" || name == "node_modules" || name.starts_with('.')
+    name == ".amdb" || name == ".git" || name == "target" || name == "node_modules" || name.starts_with('.')
 }

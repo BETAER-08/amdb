@@ -33,9 +33,9 @@ pub async fn start_server() -> anyhow::Result<()> {
 }
 
 async fn get_context(Query(params): Query<ContextParams>) -> Json<ContextResponse> {
-    let ctx_path = std::path::Path::new(".ctx");
+    let amdb_path = std::path::Path::new(".amdb");
     
-    let (symbols, relationships) = match ContextDb::open(ctx_path) {
+    let (symbols, relationships) = match ContextDb::open(amdb_path) {
         Ok(db) => {
             let syms = db.get_symbols(&params.file).unwrap_or_default();
             let rels = db.get_relationships(&params.file).unwrap_or_default();
