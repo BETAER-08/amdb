@@ -76,9 +76,28 @@ impl Indexer {
 fn is_ignored(entry: &walkdir::DirEntry) -> bool {
     let name = entry.file_name().to_string_lossy();
     
-    if name == "." {
-        return false;
+    if name == "." { return false; }
+
+    if name == ".amdb" || name == ".git" || name == "target" || name == "node_modules" {
+        return true;
     }
 
-    name == ".amdb" || name == ".git" || name == "target" || name == "node_modules" || name.starts_with('.')
+    let sensitive_files = [
+        ".env", ".env.local", ".env.production",
+        "id_rsa", "id_ed25519", ".ssh",
+        "secrets.json", "secrets.yaml",
+        ".DS_Store"
+    ];
+    
+    if sensitive_files.iter().any(|&f| name.contains(f)) {
+        return true;
+    }
+    if name.ends_with(".pem") || name.ends_with(".key") || name.ends_with(".cert") {
+        return true;
+    }
+    if name.starts_with('.') {
+        return true;
+    }
+
+    false
 }

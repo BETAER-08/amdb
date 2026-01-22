@@ -30,8 +30,8 @@ pub async fn start_server() -> anyhow::Result<()> {
         .route("/context/*file_path", get(get_context))
         .with_state(state);
 
-    let listener = TcpListener::bind("0.0.0.0:3000").await?;
-    println!("Server running on http://0.0.0.0:3000");
+let listener = TcpListener::bind("127.0.0.1:3000").await?;
+    println!("Server running on http://127.0.0.1:3000");
     
     axum::serve(listener, app).await?;
     Ok(())
