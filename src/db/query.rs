@@ -15,7 +15,7 @@ pub struct ContextDb {
 
 impl ContextDb {
     pub fn open(path: &std::path::Path) -> Result<Self> {
-        let db_path = path.join("context.db");
+        let db_path = path.join("store.db");
         let conn = Connection::open(db_path)?;
 
         super::schema::init(&conn)?;
@@ -105,4 +105,4 @@ impl ContextDb {
 
         Ok(rels)
     }
-} 
+}
