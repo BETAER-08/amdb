@@ -70,10 +70,12 @@ impl SystemWatcher {
         
         let mut parser = CodeParser::new(lang)?;
         
-        let (symbols, graph) = parser.parse(file_path, &content)?;
+        let (symbols, graph, _) = parser.parse(file_path, &content)?;
 
-        let amdb_path = Path::new(".amdb");
-        let mut db = ContextDb::open(amdb_path)?;
+        let ctx_path = Path::new(".amdb");
+        if !ctx_path.exists() { return Ok(()); }
+
+        let mut db = ContextDb::open(ctx_path)?;
         
         db.save_symbols(file_path, &symbols)?;
         db.save_relationships(file_path, &graph)?;

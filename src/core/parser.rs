@@ -1,6 +1,7 @@
 use anyhow::Result;
 use tree_sitter::{Parser, Query, QueryCursor, Node};
 use serde::{Serialize, Deserialize};
+
 pub use super::languages::SupportedLanguage;
 use super::graph::DependencyGraph;
 
@@ -34,9 +35,7 @@ impl CodeParser {
         Ok(Self { parser, language: lang })
     }
 
-    pub fn parse(&mut self, file_path: &str, code: &str) 
-        -> Result<(Vec<CodeSymbol>, DependencyGraph, Vec<CodeRoute>)> 
-    {
+    pub fn parse(&mut self, file_path: &str, code: &str) -> Result<(Vec<CodeSymbol>, DependencyGraph, Vec<CodeRoute>)> {
         let tree = self.parser.parse(code, None)
             .ok_or_else(|| anyhow::anyhow!("Parsing failed"))?;
         
@@ -49,9 +48,7 @@ impl CodeParser {
         let mut routes = Vec::new();
         let mut graph = DependencyGraph::new();
 
-        let matches = cursor.matches(&query, tree.root_node(), code.as_bytes());
-        
-        for m in matches {
+        for m in cursor.matches(&query, tree.root_node(), code.as_bytes()) {
             let mut kind = String::new();
             let mut name = String::new();
             let mut docstring = None;
@@ -61,7 +58,7 @@ impl CodeParser {
             let mut route_path = None;
 
             for capture in m.captures {
-                let capture_name = query.capture_names()[capture.index as usize].as_str();
+                let capture_name = query.capture_names()[capture.index as usize];
                 let text = capture.node.utf8_text(code.as_bytes())?.to_string();
 
                 match capture_name {
@@ -85,14 +82,14 @@ impl CodeParser {
 
             if !name.is_empty() && !kind.is_empty() {
                 symbols.push(CodeSymbol {
-                    kind, name, line: m.pattern_index, 
+                    kind, name, line: m.pattern_index, // 임시로 패턴 인덱스 사용
                     docstring, signature, is_public
                 });
             }
 
             if let (Some(method), Some(path)) = (route_method, route_path) {
                 routes.push(CodeRoute {
-                    method, path, handler: None 
+                    method, path, handler: None
                 });
             }
         }

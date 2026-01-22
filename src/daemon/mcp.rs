@@ -6,6 +6,7 @@ use crate::db::ContextDb;
 
 #[derive(Deserialize, Debug)]
 struct JsonRpcRequest {
+    #[allow(dead_code)]
     jsonrpc: String,
     method: String,
     params: Option<Value>,
@@ -37,7 +38,7 @@ pub fn run_stdio_server() -> Result<()> {
 
         let req: JsonRpcRequest = match serde_json::from_str(&line) {
             Ok(r) => r,
-            Err(_) => continue, 
+            Err(_) => continue,
         };
 
         let result = match req.method.as_str() {
@@ -78,7 +79,7 @@ fn handle_initialize() -> Result<Value, JsonRpcError> {
     Ok(json!({
         "protocolVersion": "0.1.0",
         "capabilities": {
-            "resources": {} 
+            "resources": {}
         },
         "serverInfo": {
             "name": "amdb-mcp",
@@ -92,7 +93,7 @@ fn handle_list_resources() -> Result<Value, JsonRpcError> {
         {
             "uri": "amdb://context_summary",
             "name": "Project Context Summary",
-            "description": "Global summary of the project structure"
+            "description": "Summary of all analyzed code symbols and relationships"
         }
     ]);
 
@@ -102,23 +103,23 @@ fn handle_list_resources() -> Result<Value, JsonRpcError> {
 fn handle_read_resource(params: Option<Value>) -> Result<Value, JsonRpcError> {
     let uri = params.and_then(|p| p.get("uri").cloned())
         .and_then(|v| v.as_str().map(|s| s.to_string()))
-        .ok_or(JsonRpcError { code: -32602, message: "Missing uri parameter".into() })?;
+        .ok_or(JsonRpcError { code: -32602, message: "Missing uri".into() })?;
 
     if !uri.starts_with("amdb://") {
         return Err(JsonRpcError { code: -32602, message: "Invalid URI scheme".into() });
     }
 
     let file_path = uri.replace("amdb://", ""); 
-    
-    let amdb_path = std::path::Path::new(".amdb");
-    let db = ContextDb::open(amdb_path).map_err(|_| JsonRpcError { 
-        code: -32000, message: "Failed to open .amdb/store.db".into() 
+
+    let ctx_path = std::path::Path::new(".amdb");
+    let db = ContextDb::open(ctx_path).map_err(|_| JsonRpcError { 
+        code: -32000, message: "DB Open Error".into() 
     })?;
 
     let symbols = db.get_symbols(&file_path).unwrap_or_default();
     let relationships = db.get_relationships(&file_path).unwrap_or_default();
 
-    let content_json = json!({
+    let content = json!({
         "file": file_path,
         "symbols": symbols,
         "relationships": relationships
@@ -128,7 +129,7 @@ fn handle_read_resource(params: Option<Value>) -> Result<Value, JsonRpcError> {
         "contents": [{
             "uri": uri,
             "mimeType": "application/json",
-            "text": content_json.to_string()
+            "text": content.to_string()
         }]
     }))
 }

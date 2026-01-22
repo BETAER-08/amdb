@@ -11,14 +11,17 @@ impl Indexer {
     pub fn scan_project(root: &str) -> anyhow::Result<()> {
         println!("{}", style("🔍 Starting initial project scan...").cyan().bold());
 
-        let amdb_path = Path::new(".amdb");
-        let mut db = match ContextDb::open(amdb_path) {
+        let ctx_path = Path::new(".amdb");
+        let mut db = match ContextDb::open(ctx_path) {
             Ok(db) => db,
             Err(_) => {
                 eprintln!("Context DB not found. Skipping index.");
                 return Ok(());
             }
         };
+
+        if let Ok(_) = fs::read_to_string(Path::new(root).join("package.json")) {
+        }
 
         let walker = WalkDir::new(root).into_iter();
         let mut count = 0;
@@ -31,12 +34,13 @@ impl Indexer {
             
             let path = entry.path();
             if !path.is_file() { continue; }
+
             if let Some(lang) = SupportedLanguage::from_path(path) {
                 let path_str = path.to_string_lossy().to_string();
                 
                 if let Ok(content) = fs::read_to_string(path) {
                    if let Ok(mut parser) = CodeParser::new(lang) {
-                       if let Ok((symbols, graph)) = parser.parse(&path_str, &content) {
+                       if let Ok((symbols, graph, _)) = parser.parse(&path_str, &content) {
                            let _ = db.save_symbols(&path_str, &symbols);
                            let _ = db.save_relationships(&path_str, &graph);
                            

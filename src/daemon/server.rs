@@ -1,51 +1,54 @@
 use axum::{
-    extract::Query,
+    extract::{Path as AxumPath, State},
     routing::get,
     Json, Router,
 };
-use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
-use crate::db::{ContextDb, query::Relationship}; 
+use serde::Serialize;
+use std::sync::Arc;
+use tokio::net::TcpListener;
+use crate::db::ContextDb;
+use crate::core::parser::CodeSymbol;
 
-#[derive(Deserialize)]
-struct ContextParams {
-    file: String,
+#[derive(Clone)]
+struct AppState {
+    db_path: String,
 }
 
 #[derive(Serialize)]
 struct ContextResponse {
     file: String,
     symbols: Vec<CodeSymbol>,
-    relationships: Vec<Relationship>,
+    relationships: Vec<crate::db::query::Relationship>,
 }
 
 pub async fn start_server() -> anyhow::Result<()> {
+    let state = Arc::new(AppState {
+        db_path: ".amdb".to_string(),
+    });
+
     let app = Router::new()
-        .route("/context", get(get_context));
+        .route("/context/*file_path", get(get_context))
+        .with_state(state);
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-    println!("Server running on http://{}", addr);
-
-    let listener = tokio::net::TcpListener::bind(addr).await?;
+    let listener = TcpListener::bind("0.0.0.0:3000").await?;
+    println!("Server running on http://0.0.0.0:3000");
+    
     axum::serve(listener, app).await?;
-
     Ok(())
 }
 
-async fn get_context(Query(params): Query<ContextParams>) -> Json<ContextResponse> {
-    let amdb_path = std::path::Path::new(".amdb");
+async fn get_context(
+    State(state): State<Arc<AppState>>,
+    AxumPath(file_path): AxumPath<String>,
+) -> Json<ContextResponse> {
+    let path = std::path::Path::new(&state.db_path);
+    let db = ContextDb::open(path).expect("Failed to open DB");
     
-    let (symbols, relationships) = match ContextDb::open(amdb_path) {
-        Ok(db) => {
-            let syms = db.get_symbols(&params.file).unwrap_or_default();
-            let rels = db.get_relationships(&params.file).unwrap_or_default();
-            (syms, rels)
-        },
-        Err(_) => (vec![], vec![]),
-    };
+    let symbols = db.get_symbols(&file_path).unwrap_or_default();
+    let relationships = db.get_relationships(&file_path).unwrap_or_default();
 
     Json(ContextResponse {
-        file: params.file,
+        file: file_path,
         symbols,
         relationships,
     })
