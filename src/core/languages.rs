@@ -7,7 +7,7 @@ pub enum SupportedLanguage {
     Python,
     JavaScript,
     TypeScript,
-    Tsx, 
+    Tsx,
 }
 
 impl SupportedLanguage {
@@ -38,9 +38,11 @@ impl SupportedLanguage {
                 (function_item name: (identifier) @Function)
                 (struct_item name: (type_identifier) @Struct)
                 (impl_item type: (type_identifier) @Class)
-                (call_expression function: (identifier) @Call)
-                (call_expression function: (field_expression field: (identifier) @Call))
-                (call_expression function: (scoped_identifier name: (identifier) @Call))
+                (call_expression function: [
+                    (identifier) @Call
+                    (field_expression field: (field_identifier) @Call)
+                    (scoped_identifier name: (identifier) @Call)
+                ])
             "#,
             Self::Python => r#"
                 (function_definition name: (identifier) @Function)
