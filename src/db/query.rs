@@ -18,6 +18,10 @@ impl ContextDb {
         let db_path = path.join("store.db");
         let conn = Connection::open(db_path)?;
 
+        conn.pragma_update(None, "journal_mode", "WAL")?;
+        conn.pragma_update(None, "synchronous", "NORMAL")?;
+        conn.pragma_update(None, "busy_timeout", "5000")?;
+
         super::schema::init(&conn)?;
         
         Ok(Self { conn })
