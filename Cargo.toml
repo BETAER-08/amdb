@@ -2,6 +2,11 @@
 name = "amdb"
 version = "0.1.0"
 edition = "2021"
+description = "Agent Memory Database - The Open Standard for AI Context Memory"  
+license = "MIT"                                                                  
+repository = "https://github.com/BETAER-08/amdb"                                   
+keywords = ["ai", "context", "memory", "database", "cli"]                        
+categories = ["command-line-utilities", "development-tools"]                     
 
 [[bin]]
 name = "amdb"
