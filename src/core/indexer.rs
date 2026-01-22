@@ -14,14 +14,11 @@ impl Indexer {
         let ctx_path = Path::new(".amdb");
         let mut db = match ContextDb::open(ctx_path) {
             Ok(db) => db,
-            Err(_) => {
-                eprintln!("Context DB not found. Skipping index.");
+            Err(e) => {
+                eprintln!("Context DB error: {}", e);
                 return Ok(());
             }
         };
-
-        if let Ok(_) = fs::read_to_string(Path::new(root).join("package.json")) {
-        }
 
         let walker = WalkDir::new(root).into_iter();
         let mut count = 0;
@@ -38,16 +35,35 @@ impl Indexer {
             if let Some(lang) = SupportedLanguage::from_path(path) {
                 let path_str = path.to_string_lossy().to_string();
                 
-                if let Ok(content) = fs::read_to_string(path) {
-                   if let Ok(mut parser) = CodeParser::new(lang) {
-                       if let Ok((symbols, graph, _)) = parser.parse(&path_str, &content) {
-                           let _ = db.save_symbols(&path_str, &symbols);
-                           let _ = db.save_relationships(&path_str, &graph);
-                           
-                           println!("  + Indexed: {}", style(&path_str).dim());
-                           count += 1;
-                       }
-                   }
+                match fs::read_to_string(path) {
+                    Ok(content) => {
+                        match CodeParser::new(lang) {
+                            Ok(mut parser) => {
+                                match parser.parse(&path_str, &content) {
+                                    Ok((symbols, graph, _)) => {
+                                        if let Err(e) = db.save_symbols(&path_str, &symbols) {
+                                            eprintln!("  ❌ DB Save Error (Symbols): {}", e);
+                                        }
+                                        if let Err(e) = db.save_relationships(&path_str, &graph) {
+                                            eprintln!("  ❌ DB Save Error (Rels): {}", e);
+                                        }
+                                        
+                                        println!("  + Indexed: {}", style(&path_str).dim());
+                                        count += 1;
+                                    },
+                                    Err(e) => {
+                                        eprintln!("  ⚠️ Parse Error in '{}': {}", path_str, e);
+                                    }
+                                }
+                            },
+                            Err(e) => {
+                                eprintln!("  ⚠️ Parser Init Error for '{}': {}", path_str, e);
+                            }
+                        }
+                    },
+                    Err(e) => {
+                        eprintln!("  ⚠️ File Read Error '{}': {}", path_str, e);
+                    }
                 }
             }
         }
@@ -59,5 +75,10 @@ impl Indexer {
 
 fn is_ignored(entry: &walkdir::DirEntry) -> bool {
     let name = entry.file_name().to_string_lossy();
+    
+    if name == "." {
+        return false;
+    }
+
     name == ".amdb" || name == ".git" || name == "target" || name == "node_modules" || name.starts_with('.')
 }
