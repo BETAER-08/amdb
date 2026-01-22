@@ -1,29 +1,8 @@
 use anyhow::Result;
-use std::path::Path;
-use tree_sitter::{Parser, Language, Query, QueryCursor};
+use tree_sitter::{Parser, Query, QueryCursor};
 
-#[derive(Clone, Copy)]
-pub enum SupportedLanguage {
-    Rust,
-    Python,
-}
-
-impl SupportedLanguage {
-    pub fn from_path(path: &Path) -> Option<Self> {
-        match path.extension()?.to_str()? {
-            "rs" => Some(Self::Rust),
-            "py" => Some(Self::Python),
-            _ => None,
-        }
-    }
-
-    pub fn get_language(&self) -> Language {
-        match self {
-            Self::Rust => tree_sitter_rust::language(),
-            Self::Python => tree_sitter_python::language(),
-        }
-    }
-}
+// [핵심 수정] use -> pub use 로 변경하여 외부에서 이 타입을 쓸 수 있게 공개합니다.
+pub use super::languages::SupportedLanguage;
 
 #[derive(Debug, Clone)]
 pub struct CodeSymbol {
@@ -48,19 +27,8 @@ impl CodeParser {
         let tree = self.parser.parse(code, None)
             .ok_or_else(|| anyhow::anyhow!("Parsing failed"))?;
         
-        let query_str = match self.language {
-            SupportedLanguage::Rust => r#"
-                (function_item name: (identifier) @Function)
-                (struct_item name: (type_identifier) @Struct)
-                (enum_item name: (type_identifier) @Enum)
-                (mod_item name: (identifier) @Module)
-            "#,
-            SupportedLanguage::Python => r#"
-                (function_definition name: (identifier) @Function)
-                (class_definition name: (identifier) @Class)
-            "#,
-        };
-
+        // 이제 언어별로 분리된 쿼리 문자열을 가져옵니다
+        let query_str = self.language.get_query();
         let query = Query::new(self.language.get_language(), query_str)?;
         let mut cursor = QueryCursor::new();
         let mut symbols = Vec::new();
