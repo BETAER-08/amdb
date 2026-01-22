@@ -1,30 +1,24 @@
 use axum::{
-    routing::get,
-    Router,
     extract::Query,
-    Json,
+    routing::get,
+    Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
-use std::path::Path;
-use crate::db::ContextDb;
+use crate::db::{ContextDb, query::Relationship}; // [수정] Relationship 추가
+use crate::core::parser::CodeSymbol;
 
 #[derive(Deserialize)]
-pub struct ContextQuery {
+struct ContextParams {
     file: String,
 }
 
+// [신규] 최종 응답 포맷 (심볼 + 관계)
 #[derive(Serialize)]
-pub struct ContextResponse {
+struct ContextResponse {
     file: String,
-    symbols: Vec<SymbolData>,
-}
-
-#[derive(Serialize)]
-pub struct SymbolData {
-    kind: String,
-    name: String,
-    line: usize,
+    symbols: Vec<CodeSymbol>,
+    relationships: Vec<Relationship>,
 }
 
 pub async fn start_server() -> anyhow::Result<()> {
@@ -32,28 +26,31 @@ pub async fn start_server() -> anyhow::Result<()> {
         .route("/context", get(get_context));
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-    println!("MCP Server running at http://{}", addr);
-    
+    println!("Server running on http://{}", addr);
+
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
+
     Ok(())
 }
 
-async fn get_context(Query(params): Query<ContextQuery>) -> Json<ContextResponse> {
-    let ctx_path = Path::new(".ctx");
-    let symbols = match ContextDb::open(ctx_path) {
-        Ok(db) => db.get_symbols(&params.file).unwrap_or_default(),
-        Err(_) => vec![],
+// [변경] 반환 타입이 Json<Vec<CodeSymbol>> -> Json<ContextResponse> 로 변경됨
+async fn get_context(Query(params): Query<ContextParams>) -> Json<ContextResponse> {
+    let ctx_path = std::path::Path::new(".ctx");
+    
+    // DB에서 심볼과 관계를 모두 가져옴
+    let (symbols, relationships) = match ContextDb::open(ctx_path) {
+        Ok(db) => {
+            let syms = db.get_symbols(&params.file).unwrap_or_default();
+            let rels = db.get_relationships(&params.file).unwrap_or_default();
+            (syms, rels)
+        },
+        Err(_) => (vec![], vec![]),
     };
-
-    let data = symbols.into_iter().map(|s| SymbolData {
-        kind: s.kind,
-        name: s.name,
-        line: s.line,
-    }).collect();
 
     Json(ContextResponse {
         file: params.file,
-        symbols: data,
+        symbols,
+        relationships,
     })
 }

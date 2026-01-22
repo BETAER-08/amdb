@@ -1,7 +1,7 @@
 use tree_sitter::Language;
 
 pub fn get_language() -> Language {
-    tree_sitter_rust::language()
+    tree_sitter_rust::LANGUAGE.into()
 }
 
 pub const QUERY: &str = r#"
@@ -9,4 +9,5 @@ pub const QUERY: &str = r#"
 (struct_item name: (type_identifier) @Struct)
 (enum_item name: (type_identifier) @Enum)
 (mod_item name: (identifier) @Module)
+(call_expression function: (_) @Call) 
 "#;

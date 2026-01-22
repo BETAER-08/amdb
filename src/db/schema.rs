@@ -1,7 +1,7 @@
-use anyhow::Result;
-use rusqlite::Connection;
+use rusqlite::{Connection, Result};
 
 pub fn init(conn: &Connection) -> Result<()> {
+    // 1. 기존 심볼 테이블
     conn.execute(
         "CREATE TABLE IF NOT EXISTS symbols (
             id INTEGER PRIMARY KEY,
@@ -13,5 +13,16 @@ pub fn init(conn: &Connection) -> Result<()> {
         )",
         [],
     )?;
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS relationships (
+            id INTEGER PRIMARY KEY,
+            source_file TEXT NOT NULL,
+            caller_name TEXT NOT NULL,
+            callee_name TEXT NOT NULL,
+            UNIQUE(source_file, caller_name, callee_name)
+        )",
+        [],
+    )?;
+
     Ok(())
 }

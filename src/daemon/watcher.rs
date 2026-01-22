@@ -8,6 +8,7 @@ use crate::core::parser::{CodeParser, SupportedLanguage};
 use crate::db::ContextDb;
 use console::style;
 
+#[allow(dead_code)]
 pub struct SystemWatcher;
 
 impl SystemWatcher {
@@ -28,7 +29,7 @@ impl SystemWatcher {
                     for path in event.paths {
                         let path_str = path.to_string_lossy().to_string();
 
-                        if path_str.contains("/target/") || path_str.contains("/.git/") {
+                        if path_str.contains("/target/") || path_str.contains("/.git/") || path_str.contains(".ctx") {
                             continue;
                         }
 
@@ -47,7 +48,10 @@ impl SystemWatcher {
                             }
                         }
 
-                        if Self::process_file(&path_str).is_ok() {
+                        // 에러가 나도 감시자가 죽지 않도록 처리
+                        if let Err(e) = Self::process_file(&path_str) {
+                            eprintln!("Error processing file: {}", e);
+                        } else {
                             last_processed.insert(path_str, now);
                         }
                     }
@@ -66,13 +70,22 @@ impl SystemWatcher {
         let lang = SupportedLanguage::from_path(path).unwrap();
         
         let mut parser = CodeParser::new(lang)?;
-        let symbols = parser.parse_symbols(&content)?;
+        
+        // [수정] 그래프 정보도 받아옵니다.
+        let (symbols, graph) = parser.parse(file_path, &content)?;
 
         let ctx_path = Path::new(".ctx");
         let mut db = ContextDb::open(ctx_path)?;
+        
+        // 1. 심볼 저장
         db.save_symbols(file_path, &symbols)?;
+        // 2. [추가] 관계 저장
+        db.save_relationships(file_path, &graph)?;
 
         println!("{}", style(format!("Synced: {}", file_path)).green());
+        // 디버깅용 로그 (나중에 시끄러우면 빼셔도 됩니다)
+        // println!("  -> Saved {} relations", graph.edges.len());
+        
         Ok(())
     }
 }

@@ -76,17 +76,23 @@ fn handle_parse(file_path: &str) -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("Unsupported language"))?;
         
     let mut parser = CodeParser::new(lang)?;
-    let symbols = parser.parse_symbols(&content)?;
+    
+    let (symbols, graph) = parser.parse(file_path, &content)?;
     
     let ctx_path = Path::new(".ctx");
     let mut db = ContextDb::open(ctx_path)?;
+    
+    // 1. 심볼 저장
     db.save_symbols(file_path, &symbols)?;
+    // 2. [추가됨] 관계 저장
+    db.save_relationships(file_path, &graph)?;
     
     println!("{}", style(format!("Parsed & Saved symbols from '{}'", file_path)).bold().green());
     
     println!("---------------------------------------------------");
-    db.debug_print_all()?;
+    println!("{}", style("Dependency Graph (Saved to DB):").bold().cyan());
+    graph.debug_print();
     println!("---------------------------------------------------");
-     
+    
     Ok(())
 }

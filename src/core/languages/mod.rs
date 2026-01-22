@@ -3,11 +3,13 @@ use tree_sitter::Language;
 
 pub mod rust;
 pub mod python;
+pub mod typescript;
 
 #[derive(Clone, Copy)]
 pub enum SupportedLanguage {
     Rust,
     Python,
+    TypeScript,
 }
 
 impl SupportedLanguage {
@@ -15,6 +17,7 @@ impl SupportedLanguage {
         match path.extension()?.to_str()? {
             "rs" => Some(Self::Rust),
             "py" => Some(Self::Python),
+            "ts" | "tsx" => Some(Self::TypeScript),
             _ => None,
         }
     }
@@ -23,6 +26,7 @@ impl SupportedLanguage {
         match self {
             Self::Rust => rust::get_language(),
             Self::Python => python::get_language(),
+            Self::TypeScript => typescript::get_language(),
         }
     }
 
@@ -30,6 +34,7 @@ impl SupportedLanguage {
         match self {
             Self::Rust => rust::QUERY,
             Self::Python => python::QUERY,
+            Self::TypeScript => typescript::QUERY,
         }
     }
 }
