@@ -1,12 +1,11 @@
 use anyhow::Result;
 use tree_sitter::{Parser, Query, QueryCursor, Node};
-use serde::Serialize; // [추가]
+use serde::Serialize;
 
-// [수정] 아래 줄에 Serialize 추가
 pub use super::languages::SupportedLanguage;
+
 use super::graph::DependencyGraph;
 
-// [수정] #[derive(Debug, Clone, Serialize)] 로 변경
 #[derive(Debug, Clone, Serialize)]
 pub struct CodeSymbol {
     pub kind: String,

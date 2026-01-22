@@ -11,9 +11,7 @@ pub struct Node {
 
 #[derive(Debug, Serialize)]
 pub struct DependencyGraph {
-    // [수정] pub 키워드 추가 (외부 공개)
     pub nodes: HashMap<String, Node>,
-    // [수정] pub 키워드 추가 (외부 공개)
     pub edges: HashMap<String, HashSet<String>>,
 }
 

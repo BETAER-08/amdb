@@ -1,7 +1,6 @@
 use rusqlite::{Connection, Result};
 
 pub fn init(conn: &Connection) -> Result<()> {
-    // 1. 기존 심볼 테이블
     conn.execute(
         "CREATE TABLE IF NOT EXISTS symbols (
             id INTEGER PRIMARY KEY,

@@ -48,7 +48,6 @@ impl SystemWatcher {
                             }
                         }
 
-                        // 에러가 나도 감시자가 죽지 않도록 처리
                         if let Err(e) = Self::process_file(&path_str) {
                             eprintln!("Error processing file: {}", e);
                         } else {
@@ -71,21 +70,15 @@ impl SystemWatcher {
         
         let mut parser = CodeParser::new(lang)?;
         
-        // [수정] 그래프 정보도 받아옵니다.
         let (symbols, graph) = parser.parse(file_path, &content)?;
 
         let ctx_path = Path::new(".ctx");
         let mut db = ContextDb::open(ctx_path)?;
         
-        // 1. 심볼 저장
         db.save_symbols(file_path, &symbols)?;
-        // 2. [추가] 관계 저장
         db.save_relationships(file_path, &graph)?;
 
         println!("{}", style(format!("Synced: {}", file_path)).green());
-        // 디버깅용 로그 (나중에 시끄러우면 빼셔도 됩니다)
-        // println!("  -> Saved {} relations", graph.edges.len());
-        
         Ok(())
     }
 }

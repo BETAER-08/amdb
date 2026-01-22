@@ -82,9 +82,7 @@ fn handle_parse(file_path: &str) -> Result<()> {
     let ctx_path = Path::new(".ctx");
     let mut db = ContextDb::open(ctx_path)?;
     
-    // 1. 심볼 저장
     db.save_symbols(file_path, &symbols)?;
-    // 2. [추가됨] 관계 저장
     db.save_relationships(file_path, &graph)?;
     
     println!("{}", style(format!("Parsed & Saved symbols from '{}'", file_path)).bold().green());
