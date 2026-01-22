@@ -69,17 +69,18 @@ amdb status
 
 ---
 
-## 🧠 Prompt Engineering Guide
+## 💬 How to use with AI (Crucial)
 
-To get the most out of `.amdb`, ask "Structural" questions rather than "Textual" ones.
+Since standard AI models rely on embeddings, **you must explicitly instruct them** to use `.amdb` for structural accuracy.
 
-| ❌ Weak Prompt | ✅ .amdb Prompt | Why? |
-| :--- | :--- | :--- |
-| "How does login work?" | "Find all callers of the `login` function and show me the sequence." | Traces exact execution flow. |
-| "Find similar code to this." | "Show me the Class definitions inheriting from `BaseController`." | Uses inheritance hierarchy. |
-| "Is this variable used?" | "List all symbol references for `MAX_RETRIES` in `config.rs`." | 100% recall on usages. |
+### 📋 Session Start Prompt
+Copy and paste this prompt at the beginning of your Cursor/Claude session:
 
----
+> "I am using `.amdb` in this project. It maintains a deterministic database of symbols and call graphs at `.amdb/store.db`.
+>
+> **Rule 1:** When I ask about code structure (e.g., 'Who calls this?', 'Where is X defined?'), you MUST prioritize the `.amdb` data over your internal embedding search.
+> **Rule 2:** If connected via MCP, use the `get_context` tool first.
+> **Rule 3:** Trust the `.amdb` relationships table as the source of truth for dependencies."
 
 ## 🔌 Integration
 
