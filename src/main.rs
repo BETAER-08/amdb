@@ -13,6 +13,7 @@ use db::ContextDb;
 use daemon::watcher::SystemWatcher;
 use daemon::server;
 use daemon::mcp;
+use core::indexer::Indexer; 
 
 #[derive(Parser)]
 #[command(name = "ctx", version = "0.1", about = "The Context Protocol: Open Standard for AI Context Memory")]
@@ -59,7 +60,7 @@ async fn main() -> Result<()> {
     match &cli.command {
         Commands::Init => handle_init()?,
         Commands::Status => handle_status()?,
-        
+
         Commands::Daemon { cmd } => match cmd {
             DaemonCommands::Start => {
                 println!("{}", style("Starting .CTX Daemon (HTTP Server)...").green().bold());
@@ -84,19 +85,23 @@ fn handle_init() -> Result<()> {
     let path = Path::new(".ctx");
     if path.exists() {
         println!("{}", style("Already initialized").yellow());
+        Indexer::scan_project(".")?;
         return Ok(());
     }
 
     fs::create_dir(path)?;
-    
+
     fs::create_dir(path.join("vector")).unwrap_or_default();
-    
+
     fs::write(path.join("config.toml"), "version = \"0.1\"\n[ignore]\npatterns = [\"target\", \".git\"]")?;
     
     println!("{}", style("Initialized .ctx project").green());
     println!("  - Created .ctx/ directory");
     println!("  - Created .ctx/store.db (via SQLite)");
     println!("  - Created .ctx/vector/ (for Semantic Search)");
+
+    Indexer::scan_project(".")?;
+    
     Ok(())
 }
 
@@ -104,7 +109,7 @@ fn handle_status() -> Result<()> {
     let path = Path::new(".ctx");
     if path.exists() {
         println!("{}", style("Status: Active").green().bold());
-        
+
         let db_path = path.join("store.db");
         if db_path.exists() {
             println!("Context Store: {}", style("Connected").cyan());
@@ -122,6 +127,10 @@ fn handle_status() -> Result<()> {
 }
 
 async fn handle_daemon_start() -> Result<()> {
+    std::thread::spawn(|| {
+        let _ = Indexer::scan_project(".");
+    });
+
     std::thread::spawn(|| {
         if let Err(e) = SystemWatcher::start(".") {
             eprintln!("Watcher failed: {}", e);
@@ -144,7 +153,7 @@ fn handle_parse(file_path: &str) -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("Unsupported language"))?;
         
     let mut parser = CodeParser::new(lang)?;
-    let (symbols, graph) = parser.parse(file_path, &content)?;
+    let (symbols, graph, _) = parser.parse(file_path, &content)?;
     
     let ctx_path = Path::new(".ctx");
     if !ctx_path.exists() {

@@ -5,10 +5,15 @@ pub fn get_language() -> Language {
 }
 
 pub const QUERY: &str = r#"
-(function_declaration name: (identifier) @Function)
-(class_declaration name: (type_identifier) @Class)
-(interface_declaration name: (type_identifier) @Interface)
-(method_definition name: (property_identifier) @Method)
-(type_alias_declaration name: (type_identifier) @Type)
-(call_expression function: (_) @Call) 
+(comment) @doc
+(function_declaration 
+    name: (identifier) @Function 
+    parameters: (formal_parameters) @sig)
+(export_statement) @pub
+(call_expression 
+    function: (member_expression property: (property_identifier) @route_method)
+    arguments: (arguments (string (string_fragment) @route_path))
+    (#match? @route_method "^(get|post|put|delete|patch)$")
+)
+(call_expression function: (identifier) @Call)
 "#;

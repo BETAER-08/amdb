@@ -5,9 +5,10 @@ pub fn get_language() -> Language {
 }
 
 pub const QUERY: &str = r#"
-(function_item name: (identifier) @Function)
-(struct_item name: (type_identifier) @Struct)
-(enum_item name: (type_identifier) @Enum)
-(mod_item name: (identifier) @Module)
-(call_expression function: (_) @Call) 
+(line_comment) @doc
+(function_item 
+    visibility_modifier: (visibility_modifier) @pub 
+    name: (identifier) @Function 
+    parameters: (parameters) @sig)
+(call_expression function: (_) @Call)
 "#;
