@@ -2,13 +2,10 @@
 
 # .amdb
 
-**The Context Protocol**
-<br>
-_The Open Standard for AI Context Memory_
+**The Open Standard for AI Context Memory**
 
 [![Rust](https://img.shields.io/badge/built_with-Rust-dca282.svg)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
 
 </div>
 
@@ -16,71 +13,81 @@ _The Open Standard for AI Context Memory_
 
 ## 📐 The Missing Pillar
 
-**.amdb** (pronounced "dot-context") is a local daemon that turns any project into a self-explaining entity. It ensures that every AI tool—whether it's GitHub Copilot, Cursor, or a local LLM—shares a single, unified understanding of your codebase.
+**Is your AI guessing?**
 
-## 🚀 Why .amdb?
+Most AI tools (RAG, Vector Embeddings) rely on "fuzzy" matching—finding text that looks similar. This is great for natural language, but **terrible for code**. Code is precise; dependencies are DAGs, not probability distributions.
 
-**The Problem: Siloed Intelligence**
-Every new AI tool you use re-indexes your code from scratch. They are strangers to your project, guessing context based on open files or naive text chunking. They don't talk to each other, and they forget everything when you close the session.
+**.amdb** (Agent Memory Database) introduces a **Deterministic Context Layer**:
+- **Traditional RAG:** "Find code that looks like 'authentication'" → Returns random specialized auth logic mixed with comments.
+- **.amdb Protocol:** "Find the function calling `User::login` and all its implementations" → Returns the exact Call Graph and Symbol references.
 
-**The Solution: A Shared Protocol**
-`.amdb` runs locally, watching your file system. It proactively parses code, understands dependencies, and maintains a high-fidelity context map in a standardized `.amdb/` directory.
-- **Write Once:** Your context is calculated once.
-- **Read Everywhere:** Exposed via **MCP (Model Context Protocol)** to any supported editor or agent.
+We bridge the gap between **Fuzzy Search** and **Code Structure**, giving your AI the "God-mode" accuracy it lacks.
+
+---
 
 ## 🏗️ Architecture
 
-The system is designed as a modular, high-performance daemon built in Rust.
+`.amdb` runs as a high-performance local daemon, turning your codebase into a queryable knowledge graph.
 
 ```mermaid
 graph LR
     FS[File System] -->|Notify| Watcher
     Watcher -->|Diff| Parser[Tree-sitter Parser]
     Parser -->|AST| Engine
-    Engine -->|Embeddings| DB[(.amdb/store.db)]
+    Engine -->|Call Graph| DB[(.amdb/store.db)]
     DB -->|Query| MCPServer[MCP Server]
     MCPServer -->|JSON-RPC| Client[Cursor / Claude / Copilot]
 ```
 
-### Folder Structure
-The `.amdb` folder acts as the brain of your repository:
-- `config.toml`: Protocol settings (ignore patterns, language policies).
-- `store.db`: SQLite database storing semantic relationships and symbols.
-- `vector/`: Local vector store for semantic search.
+1.  **File Detection:** `notify` watches for real-time changes.
+2.  **Parsing:** `tree-sitter` extracts symbols, ASTs, and imports (Rust, Python, JS/TS supported).
+3.  **DB Storage:** Relationships are stored in a local SQLite graph (`.amdb/store.db`).
+4.  **MCP Server:** Exposes data via the **Model Context Protocol** to any agent.
 
-## ⚡ Getting Started
+---
 
-### Installation
-(Assuming crate publication)
-```bash
-cargo install amdb
-```
+## ⚡ Usage Workflow
 
-### Initialization
-Turn your current directory into a Context-Aware project:
+### 1. Initialization
+Turn any folder into a context-aware project:
 ```bash
 amdb init
 ```
-This creates the `.amdb` skeleton and begins the initial indexing process.
 
-### Usage
-Start the background daemon to keep context in sync:
+### 2. Start the Daemon
+Launch the background server to keep context in sync and serve the MCP API:
 ```bash
 amdb daemon start
 ```
+> **Note:** The server binds to `0.0.0.0:3000` by default.
 
-Check the status of the context index:
+### 3. Check Status
+Verify that your codebase is indexed and the protocol is active:
 ```bash
 amdb status
 ```
 
+---
+
+## 🧠 Prompt Engineering Guide
+
+To get the most out of `.amdb`, ask "Structural" questions rather than "Textual" ones.
+
+| ❌ Weak Prompt | ✅ .amdb Prompt | Why? |
+| :--- | :--- | :--- |
+| "How does login work?" | "Find all callers of the `login` function and show me the sequence." | Traces exact execution flow. |
+| "Find similar code to this." | "Show me the Class definitions inheriting from `BaseController`." | Uses inheritance hierarchy. |
+| "Is this variable used?" | "List all symbol references for `MAX_RETRIES` in `config.rs`." | 100% recall on usages. |
+
+---
+
 ## 🔌 Integration
 
-### Cursor / VS Code
-`.amdb` generates a dynamic `.cursorrules` file or exposes a local server that Cursor allows you to hook into, providing "God-mode" context awarness without uploading your code to the cloud.
+### Cursor
+Cursor can natively talk to local servers. Add `.amdb` as a context source (feature coming soon) or use our generated `.cursorrules` to guide the model.
 
-### Claude Desktop
-Configure your `claude_desktop_config.json` to use the locally running .amdb MCP server:
+### Claude Desktop (MCP)
+Add the following to your `claude_desktop_config.json` to enable .amdb as a tool:
 
 ```json
 {
@@ -93,14 +100,18 @@ Configure your `claude_desktop_config.json` to use the locally running .amdb MCP
 }
 ```
 
+Now you can ask Claude: *"What is the relationship between `User` and `Session` structs in this project?"*
+
+---
+
 ## 🗺️ Roadmap
 
 - [x] **Phase 1: Local Context Map** (Complete)
-    - File watching, Tree-sitter parsing, and SQLite storage.
+    - Real-time file watching, Tree-sitter parsing, SQLite Graph storage.
 - [ ] **Phase 2: Semantic Vector Sync** (In Progress)
-    - Local embedding generation and RAG interface.
-- [ ] **Phase 3: Global Standard**
-    - Native integration plugins for JetBrains and VS Code.
+    - Hybrid search combining Deterministic Graph + Semantic Embeddings.
+
+---
 
 ## 📄 License
 
