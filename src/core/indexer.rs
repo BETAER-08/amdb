@@ -6,13 +6,16 @@ use crate::core::parser::{CodeParser, SupportedLanguage};
 use crate::db::ContextDb;
 use crate::core::embedding::EmbeddingEngine;
 use crate::core::vector_store::VectorStore;
+use crate::core::config::AppConfig;
 
 pub struct Indexer;
 
 impl Indexer {
     pub fn scan_project(root: &str) -> anyhow::Result<()> {
-        println!("{}", style("🔍 Starting initial project scan...").cyan().bold());
+        println!("{}", style("🔍 Starting Semantic Indexing (v0.2 Enhanced)...").cyan().bold());
 
+        let config = AppConfig::load();
+        
         let embedder = match EmbeddingEngine::new() {
             Ok(e) => Some(e),
             Err(e) => {
@@ -22,21 +25,22 @@ impl Indexer {
         };
 
         let ctx_path = Path::new(".amdb");
+        if !ctx_path.exists() { fs::create_dir(ctx_path)?; }
+        
         let vector_path = ctx_path.join("vector");
+        if !vector_path.exists() { fs::create_dir(&vector_path)?; }
+
         let mut vector_store = VectorStore::load(&vector_path).unwrap_or(VectorStore::new());
 
         let mut db = match ContextDb::open(ctx_path) {
             Ok(db) => db,
-            Err(e) => {
-                eprintln!("Context DB error: {}", e);
-                return Ok(());
-            }
+            Err(e) => return Err(anyhow::anyhow!("DB Init failed: {}", e)),
         };
 
         let walker = WalkDir::new(root).into_iter();
         let mut count = 0;
 
-        for entry in walker.filter_entry(|e| !is_ignored(e)) {
+        for entry in walker.filter_entry(|e| !is_ignored(e, &config.exclude_patterns)) {
             let entry = match entry {
                 Ok(e) => e,
                 Err(_) => continue,
@@ -48,55 +52,33 @@ impl Indexer {
             if let Some(lang) = SupportedLanguage::from_path(path) {
                 let path_str = path.to_string_lossy().to_string();
                 
-                match fs::read_to_string(path) {
-                    Ok(content) => {
-                        match CodeParser::new(lang) {
-                            Ok(mut parser) => {
-                                match parser.parse(&path_str, &content) {
-                                    Ok((symbols, graph, _, warnings)) => {
-                                        if let Err(e) = db.save_symbols(&path_str, &symbols) {
-                                            eprintln!("  ❌ DB Save Error (Symbols): {}", e);
-                                        }
-                                        if let Err(e) = db.save_relationships(&path_str, &graph) {
-                                            eprintln!("  ❌ DB Save Error (Rels): {}", e);
-                                        }
-                                        if !warnings.is_empty() {
-                                            if let Err(e) = db.save_warnings(&path_str, &warnings) {
-                                                eprintln!("  ❌ DB Save Error (Warnings): {}", e);
-                                            }
-                                            println!("  🚨 {} Security warning(s) found in {}", warnings.len(), style(&path_str).red());
-                                        }
+                if let Ok(content) = fs::read_to_string(path) {
+                    if let Ok(mut parser) = CodeParser::new(lang) {
+                        if let Ok((symbols, graph, _, warnings)) = parser.parse(&path_str, &content) {
+                            
+                            let _ = db.save_symbols(&path_str, &symbols);
+                            let _ = db.save_relationships(&path_str, &graph);
+                            if !warnings.is_empty() {
+                                let _ = db.save_warnings(&path_str, &warnings);
+                                println!("  🚨 {} Security warning(s) found in {}", warnings.len(), style(&path_str).red());
+                            }
 
-                                        if let Some(engine) = &embedder {
-                                            for symbol in &symbols {
-                                                let semantic_text = format!("{} {}: {}", 
-                                                    symbol.kind, 
-                                                    symbol.name, 
-                                                    symbol.docstring.clone().unwrap_or_default()
-                                                );
-                                                
-                                                if let Ok(vec) = engine.embed(&semantic_text) {
-                                                    let id = format!("{}::{}", path_str, symbol.name);
-                                                    vector_store.add(id, path_str.clone(), semantic_text, vec);
-                                                }
-                                            }
-                                        }
-                                        
-                                        println!("  + Indexed: {}", style(&path_str).dim());
-                                        count += 1;
-                                    },
-                                    Err(e) => {
-                                        eprintln!("  ⚠️ Parse Error in '{}': {}", path_str, e);
+                            if let Some(engine) = &embedder {
+                                for symbol in &symbols {
+                                    let doc = symbol.docstring.clone().unwrap_or_default();
+                                    let semantic_text = format!("Type: {}, Name: {}. Description: {}", 
+                                        symbol.kind, symbol.name, doc);
+                                    
+                                    if let Ok(vec) = engine.embed(&semantic_text) {
+                                        let id = format!("{}::{}", path_str, symbol.name);
+                                        vector_store.add(id, path_str.clone(), semantic_text, vec);
                                     }
                                 }
-                            },
-                            Err(e) => {
-                                eprintln!("  ⚠️ Parser Init Error for '{}': {}", path_str, e);
                             }
+                            
+                            println!("  + Indexed: {}", style(&path_str).dim());
+                            count += 1;
                         }
-                    },
-                    Err(e) => {
-                        eprintln!("  ⚠️ File Read Error '{}': {}", path_str, e);
                     }
                 }
             }
@@ -106,34 +88,23 @@ impl Indexer {
             eprintln!("Failed to save vector store: {}", e);
         }
 
-        println!("{}", style(format!("✅ Indexing complete. {} files learned.", count)).green().bold());
+        println!("{}", style(format!("✅ Indexing complete. {} files processed.", count)).green().bold());
         Ok(())
     }
 }
 
-fn is_ignored(entry: &walkdir::DirEntry) -> bool {
+fn is_ignored(entry: &walkdir::DirEntry, patterns: &[String]) -> bool {
     let name = entry.file_name().to_string_lossy();
     
     if name == "." { return false; }
 
-    if name == ".amdb" || name == ".git" || name == "target" || name == "node_modules" {
-        return true;
+    for pattern in patterns {
+        if name.contains(pattern) {
+            return true;
+        }
     }
-
-    let sensitive_files = [
-        ".env", ".env.local", ".env.production",
-        "id_rsa", "id_ed25519", ".ssh",
-        "secrets.json", "secrets.yaml",
-        ".DS_Store"
-    ];
     
-    if sensitive_files.iter().any(|&f| name.contains(f)) {
-        return true;
-    }
-    if name.ends_with(".pem") || name.ends_with(".key") || name.ends_with(".cert") {
-        return true;
-    }
-    if name.starts_with('.') {
+    if name.starts_with('.') && name != "." {
         return true;
     }
 

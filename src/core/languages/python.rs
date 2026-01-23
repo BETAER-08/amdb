@@ -5,8 +5,18 @@ pub fn language() -> Language {
 }
 
 pub const QUERY: &str = r#"
-    (function_definition name: (identifier) @Function)
-    (class_definition name: (identifier) @Class)
-    (call function: (identifier) @Call)
-    (call function: (attribute attribute: (identifier) @Call))
+    (function_definition
+      name: (identifier) @Function
+      body: (block . (expression_statement (string) @doc)?)
+    )
+    (class_definition
+      name: (identifier) @Class
+      body: (block . (expression_statement (string) @doc)?)
+    )
+    (call
+      function: [
+        (attribute object: (_) attribute: (identifier) @Call)
+        (identifier) @Call
+      ]
+    )
 "#;

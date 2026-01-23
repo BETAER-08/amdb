@@ -3,6 +3,7 @@ use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+use std::io::{BufReader, BufWriter};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VectorRecord {
@@ -25,19 +26,25 @@ impl VectorStore {
     }
 
     pub fn load(path: &Path) -> Result<Self> {
-        let file_path = path.join("vectors.json");
+        let file_path = path.join("vectors.bin");
         if !file_path.exists() {
             return Ok(Self::new());
         }
-        let content = fs::read_to_string(file_path)?;
-        let store = serde_json::from_str(&content)?;
+        
+        let file = fs::File::open(file_path)?;
+        let reader = BufReader::new(file);
+        let store: VectorStore = bincode::deserialize_from(reader)?;
+        
         Ok(store)
     }
 
     pub fn save(&self, path: &Path) -> Result<()> {
-        let file_path = path.join("vectors.json");
-        let content = serde_json::to_string_pretty(self)?;
-        fs::write(file_path, content)?;
+        let file_path = path.join("vectors.bin");
+        
+        let file = fs::File::create(file_path)?;
+        let writer = BufWriter::new(file);
+        bincode::serialize_into(writer, self)?;
+        
         Ok(())
     }
 
@@ -67,5 +74,6 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f64 {
     let dot_product: f32 = a.iter().zip(b).map(|(x, y)| x * y).sum();
     let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
     let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+    if norm_a == 0.0 || norm_b == 0.0 { return 0.0; }
     (dot_product / (norm_a * norm_b)) as f64
 }

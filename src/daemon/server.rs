@@ -10,6 +10,7 @@ use crate::db::ContextDb;
 use crate::core::parser::{CodeSymbol, CodeWarning};
 use crate::core::embedding::EmbeddingEngine;
 use crate::core::vector_store::VectorStore;
+use crate::core::config::AppConfig;
 
 #[derive(Clone)]
 struct AppState {
@@ -31,19 +32,20 @@ struct SearchParams {
     q: String,
 }
 
-
 #[derive(Serialize)]
 struct SearchResponse {
-    score: f64,     
-    file: String,   
-    id: String,    
-    text: String,   
+    score: f64,
+    file: String,
+    id: String,
+    text: String,
 }
 
 pub async fn start_server() -> anyhow::Result<()> {
+    let config = AppConfig::load();
+    let port = config.server_port;
+
     let vector_path = std::path::Path::new(".amdb/vector");
     let vector_store = VectorStore::load(vector_path).unwrap_or(VectorStore::new());
-    
     let embedder = EmbeddingEngine::new()?;
 
     let state = Arc::new(AppState {
@@ -57,8 +59,9 @@ pub async fn start_server() -> anyhow::Result<()> {
         .route("/search", get(handle_search))
         .with_state(state);
 
-    let listener = TcpListener::bind("0.0.0.0:3000").await?;
-    println!("Server running on http://0.0.0.0:3000");
+    let addr = format!("0.0.0.0:{}", port);
+    let listener = TcpListener::bind(&addr).await?;
+    println!("Server running on http://{}", addr);
     
     axum::serve(listener, app).await?;
     Ok(())
@@ -93,7 +96,7 @@ async fn handle_search(
     };
 
     let store = state.vector_store.lock().unwrap();
-    let results = store.search(&query_vec, 5); 
+    let results = store.search(&query_vec, 5);
 
     let response = results.into_iter()
         .map(|(score, record)| SearchResponse { 
