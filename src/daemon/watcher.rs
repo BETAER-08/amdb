@@ -1,90 +1,37 @@
-use anyhow::Result;
 use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::Path;
 use std::sync::mpsc::channel;
-use std::collections::HashMap;
-use std::time::{Duration, Instant};
-use crate::core::parser::{CodeParser, SupportedLanguage};
-use crate::db::ContextDb;
-use console::style;
+use crate::core::indexer::Indexer;
 
-#[allow(dead_code)]
-pub struct SystemWatcher;
+pub struct FileWatcher;
 
-impl SystemWatcher {
-    pub fn start(path: &str) -> Result<()> {
+impl FileWatcher {
+    pub async fn watch(path: &str) -> anyhow::Result<()> {
         let (tx, rx) = channel();
-        
         let mut watcher = RecommendedWatcher::new(tx, Config::default())?;
-        
+
         watcher.watch(Path::new(path), RecursiveMode::Recursive)?;
 
-        println!("{}", style(format!("Watching '{}'...", path)).bold().green());
-
-        let mut last_processed: HashMap<String, Instant> = HashMap::new();
+        println!("Watcher started on: {}", path);
 
         for res in rx {
             match res {
                 Ok(event) => {
-                    for path in event.paths {
-                        let path_str = path.to_string_lossy().to_string();
-
-                        if path_str.contains("/target/") || path_str.contains("/.git/") || path_str.contains(".amdb") {
+                    if let Some(path) = event.paths.get(0) {
+                        let path_str = path.to_string_lossy();
+                        
+                        if path_str.contains(".database") || path_str.contains(".amdb") {
                             continue;
                         }
 
-                        if !Path::new(&path_str).exists() {
-                            continue;
-                        }
-
-                        if SupportedLanguage::from_path(Path::new(&path_str)).is_none() {
-                            continue;
-                        }
-
-                        let now = Instant::now();
-                        if let Some(last_time) = last_processed.get(&path_str) {
-                            if now.duration_since(*last_time) < Duration::from_millis(500) {
-                                continue;
-                            }
-                        }
-
-                        if let Err(e) = Self::process_file(&path_str) {
-                            eprintln!("Error processing file: {}", e);
-                        } else {
-                            last_processed.insert(path_str, now);
+                        if path.extension().map_or(false, |ext| ext == "rs" || ext == "py" || ext == "js" || ext == "ts") {
+                            println!("Detected change in: {}", path_str);
+                            let _ = Indexer::scan_project("."); 
                         }
                     }
                 },
                 Err(e) => println!("Watch error: {:?}", e),
             }
-        }
-
-        Ok(())
-    }
-
-    fn process_file(file_path: &str) -> Result<()> {
-        let path = Path::new(file_path);
-        
-        let content = std::fs::read_to_string(path)?;
-        let lang = SupportedLanguage::from_path(path).unwrap();
-        
-        let mut parser = CodeParser::new(lang)?;
-        
-        let (symbols, graph, _, warnings) = parser.parse(file_path, &content)?;
-
-        let ctx_path = Path::new(".amdb");
-        if !ctx_path.exists() { return Ok(()); }
-
-        let mut db = ContextDb::open(ctx_path)?;
-        
-        db.save_symbols(file_path, &symbols)?;
-        db.save_relationships(file_path, &graph)?;
-        db.save_warnings(file_path, &warnings)?;
-
-        if !warnings.is_empty() {
-            println!("{}", style(format!("🚨 Security Alert in: {}", file_path)).red().bold());
-        } else {
-            println!("{}", style(format!("Synced: {}", file_path)).green());
         }
         Ok(())
     }

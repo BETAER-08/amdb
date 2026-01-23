@@ -5,3 +5,4 @@ pub mod languages;
 pub mod embedding;
 pub mod vector_store;
 pub mod config;
+pub mod generator;
