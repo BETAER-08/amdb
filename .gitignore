@@ -5,3 +5,5 @@
 .vscode
 .idea
 *.swp
+.amdb/
+.fastembed_cache/
