@@ -37,7 +37,7 @@ amdb treats security as a first-class citizen.
 
 ### 3. ⚡ High Performance
 Built with **Rust**, amdb is designed for speed and efficiency.
-- **Optimized Storage:** Uses `Bincode` serialization for lightning-fast vector loading.
+- **Optimized Storage:** Uses `Bincode` serialization for lightning-fast vector loading (introduced in v0.2.0).
 - **Metadata Management:** Leverages SQLite for robust and efficient metadata querying.
 - **Zero-Latency:** engineered to serve context to agents in milliseconds.
 
@@ -85,23 +85,14 @@ cargo install --path .
 
 Control amdb's behavior using `amdb.toml` in your project root:
 
-```toml
-[server]
-port = 3000
-host = "127.0.0.1"
-
-[index]
-# Files or directories to exclude from indexing
-exclude = [
+server_port = 3000
+exclude_patterns = [
     "target",
     "node_modules",
     "dist",
-    ".git"
+    ".git",
+    "secret_folder"
 ]
-
-[security]
-enable_scanner = true
-```
 
 ---
 
@@ -116,18 +107,14 @@ curl -X GET "http://localhost:3000/search?q=database connection"
 ```
 
 **Response Example:**
-```json
-{
-  "results": [
-    {
-      "file": "src/db/connection.rs",
-      "symbol": "connect_pool",
-      "score": 0.89,
-      "type": "function",
-      "context": "..."
-    }
-  ]
-}
+[
+  {
+    "score": 0.89,
+    "file": "src/db/connection.rs",
+    "id": "src/db/connection.rs::connect_pool",
+    "text": "Type: function, Name: connect_pool. Description: Establishes a connection pool..."
+  }
+]
 ```
 
 ---
