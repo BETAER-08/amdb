@@ -4,6 +4,8 @@ use std::path::Path;
 use std::fs;
 use crate::core::parser::{CodeParser, SupportedLanguage};
 use crate::db::ContextDb;
+use crate::core::embedding::EmbeddingEngine;
+use crate::core::vector_store::VectorStore;
 
 pub struct Indexer;
 
@@ -11,7 +13,18 @@ impl Indexer {
     pub fn scan_project(root: &str) -> anyhow::Result<()> {
         println!("{}", style("🔍 Starting initial project scan...").cyan().bold());
 
+        let embedder = match EmbeddingEngine::new() {
+            Ok(e) => Some(e),
+            Err(e) => {
+                eprintln!("⚠️ Failed to init Embedding Engine: {}", e);
+                None
+            }
+        };
+
         let ctx_path = Path::new(".amdb");
+        let vector_path = ctx_path.join("vector");
+        let mut vector_store = VectorStore::load(&vector_path).unwrap_or(VectorStore::new());
+
         let mut db = match ContextDb::open(ctx_path) {
             Ok(db) => db,
             Err(e) => {
@@ -47,12 +60,26 @@ impl Indexer {
                                         if let Err(e) = db.save_relationships(&path_str, &graph) {
                                             eprintln!("  ❌ DB Save Error (Rels): {}", e);
                                         }
-                                        
                                         if !warnings.is_empty() {
                                             if let Err(e) = db.save_warnings(&path_str, &warnings) {
                                                 eprintln!("  ❌ DB Save Error (Warnings): {}", e);
                                             }
                                             println!("  🚨 {} Security warning(s) found in {}", warnings.len(), style(&path_str).red());
+                                        }
+
+                                        if let Some(engine) = &embedder {
+                                            for symbol in &symbols {
+                                                let semantic_text = format!("{} {}: {}", 
+                                                    symbol.kind, 
+                                                    symbol.name, 
+                                                    symbol.docstring.clone().unwrap_or_default()
+                                                );
+                                                
+                                                if let Ok(vec) = engine.embed(&semantic_text) {
+                                                    let id = format!("{}::{}", path_str, symbol.name);
+                                                    vector_store.add(id, path_str.clone(), semantic_text, vec);
+                                                }
+                                            }
                                         }
                                         
                                         println!("  + Indexed: {}", style(&path_str).dim());
@@ -73,6 +100,10 @@ impl Indexer {
                     }
                 }
             }
+        }
+
+        if let Err(e) = vector_store.save(&vector_path) {
+            eprintln!("Failed to save vector store: {}", e);
         }
 
         println!("{}", style(format!("✅ Indexing complete. {} files learned.", count)).green().bold());
