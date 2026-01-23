@@ -1,119 +1,144 @@
 <div align="center">
 
-# .amdb
+# amdb (Agent Memory Database)
+### The Open Standard for AI Context Memory
 
-**The Open Standard for AI Context Memory**
-
-[![Rust](https://img.shields.io/badge/built_with-Rust-dca282.svg)](https://www.rust-lang.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+![Build](https://img.shields.io/badge/build-passing-brightgreen)
+![License](https://img.shields.io/badge/license-MIT-blue)
+![Rust](https://img.shields.io/badge/rust-v1.75%2B-orange)
+![Version](https://img.shields.io/badge/version-v0.1.0-blue)
 
 </div>
 
 ---
 
-## 📐 The Missing Pillar
+## Why amdb?
 
-**Is your AI guessing?**
+**amdb** is a local-first code search and indexing engine designed to bridge the gap between AI Agents (like Cursor, Claude) and your codebase's deep context. 
 
-Most AI tools (RAG, Vector Embeddings) rely on "fuzzy" matching—finding text that looks similar. This is great for natural language, but **terrible for code**. Code is precise; dependencies are DAGs, not probability distributions.
+Traditional text search misses the intent; pure vector search misses the structure. **amdb** understands both. It combines semantic understanding with structural graph analysis to provide the "complete picture" of your project to AI models, all while running locally on your machine with zero external API calls.
 
-**.amdb** (Agent Memory Database) introduces a **Deterministic Context Layer**:
-- **Traditional RAG:** "Find code that looks like 'authentication'" → Returns random specialized auth logic mixed with comments.
-- **.amdb Protocol:** "Find the function calling `User::login` and all its implementations" → Returns the exact Call Graph and Symbol references.
-
-We bridge the gap between **Fuzzy Search** and **Code Structure**, giving your AI the "God-mode" accuracy it lacks.
+Whether you are debugging complex authentication flows or refactoring legacy code, amdb ensures your AI agent knows exactly *what* you are looking for and *where* it fits.
 
 ---
 
-## 🏗️ Architecture
+## Key Features
 
-`.amdb` runs as a high-performance local daemon, turning your codebase into a queryable knowledge graph.
+### 1. 🧠 Hybrid Search (v0.1.0)
+The core of amdb is its ability to fuse **Deterministic Call Graphs** with **Semantic Vector Search**.
+- **Local Embedding:** Powered by Rust's `fastembed` and `ort`, embeddings are generated locally. No data leaves your machine.
+- **Context-Aware:** Searching for "login logic" determines the intent and finds `auth_user` based on code behavior, even if the word "login" is never mentioned.
+- **Graph-Enhanced:** It doesn't just find the function; it understands caller/callee relationships to provide the full execution context.
 
-```mermaid
-graph LR
-    FS[File System] -->|Notify| Watcher
-    Watcher -->|Diff| Parser[Tree-sitter Parser]
-    Parser -->|AST| Engine
-    Engine -->|Call Graph| DB[(.amdb/store.db)]
-    DB -->|Query| MCPServer[MCP Server]
-    MCPServer -->|JSON-RPC| Client[Cursor / Claude / Copilot]
-```
+### 2. 🛡️ Security Scanner
+amdb treats security as a first-class citizen.
+- **Real-time Detection:** Automatically scans for hardcoded secrets (AWS keys, Google API keys, JWT tokens) during indexing.
+- **DevSecOps Ready:** Prevents security accidents by warning you before sensitive data enters your context memory.
 
-1.  **File Detection:** `notify` watches for real-time changes.
-2.  **Parsing:** `tree-sitter` extracts symbols, ASTs, and imports (Rust, Python, JS/TS supported).
-3.  **DB Storage:** Relationships are stored in a local SQLite graph (`.amdb/store.db`).
-4.  **MCP Server:** Exposes data via the **Model Context Protocol** to any agent.
+### 3. ⚡ High Performance
+Built with **Rust**, amdb is designed for speed and efficiency.
+- **Optimized Storage:** Uses `Bincode` serialization for lightning-fast vector loading.
+- **Metadata Management:** Leverages SQLite for robust and efficient metadata querying.
+- **Zero-Latency:** engineered to serve context to agents in milliseconds.
 
----
-
-## ⚡ Usage Workflow
-
-### 1. Initialization
-Turn any folder into a context-aware project:
-```bash
-amdb init
-```
-
-### 2. Start the Daemon
-Launch the background server to keep context in sync and serve the MCP API:
-```bash
-amdb daemon start
-```
-> **Note:** The server binds to `0.0.0.0:3000` by default.
-
-### 3. Check Status
-Verify that your codebase is indexed and the protocol is active:
-```bash
-amdb status
-```
+### 4. 🛠️ Developer Experience
+- **Smart Watcher:** Real-time file change detection triggers automatic re-indexing.
+- **Polyglot Support:** Native AST parsing and docstring understanding for **Rust**, **Python**, **TypeScript**, and **JavaScript**.
+- **Configurable:** Full control via `amdb.toml`.
 
 ---
 
-## 💬 How to use with AI (Crucial)
+## Installation & Getting Started
 
-Since standard AI models rely on embeddings, **you must explicitly instruct them** to use `.amdb` for structural accuracy.
+### Prerequisites
+- Rust v1.75 or higher
 
-### 📋 Session Start Prompt
-Copy and paste this prompt at the beginning of your Cursor/Claude session:
+### Installation
+You can install amdb directly from the source:
 
-> "I am using `.amdb` in this project. It maintains a deterministic database of symbols and call graphs at `.amdb/store.db`.
->
-> **Rule 1:** When I ask about code structure (e.g., 'Who calls this?', 'Where is X defined?'), you MUST prioritize the `.amdb` data over your internal embedding search.
-> **Rule 2:** If connected via MCP, use the `get_context` tool first.
-> **Rule 3:** Trust the `.amdb` relationships table as the source of truth for dependencies."
+```bash
+cargo install --path .
+```
 
-## 🔌 Integration
+### Quick Start
 
-### Cursor
-Cursor can natively talk to local servers. Add `.amdb` as a context source (feature coming soon) or use our generated `.cursorrules` to guide the model.
+1. **Initialize amdb** in your project root:
+   ```bash
+   amdb init
+   ```
+   *This analyzes your project structure and downloads the necessary embedding models.*
 
-### Claude Desktop (MCP)
-Add the following to your `claude_desktop_config.json` to enable .amdb as a tool:
+2. **Start the Daemon**:
+   ```bash
+   amdb daemon start
+   ```
+   *This starts the background server on port 3000 (default).*
 
+3. **Search**:
+   ```bash
+   curl "http://localhost:3000/search?q=auth logic"
+   ```
+
+---
+
+## Configuration
+
+Control amdb's behavior using `amdb.toml` in your project root:
+
+```toml
+[server]
+port = 3000
+host = "127.0.0.1"
+
+[index]
+# Files or directories to exclude from indexing
+exclude = [
+    "target",
+    "node_modules",
+    "dist",
+    ".git"
+]
+
+[security]
+enable_scanner = true
+```
+
+---
+
+## API Usage
+
+amdb exposes a REST API for easy integration with your AI tools or IDE plugins.
+
+### Search Endpoint
+
+```bash
+curl -X GET "http://localhost:3000/search?q=database connection"
+```
+
+**Response Example:**
 ```json
 {
-  "mcpServers": {
-    "amdb": {
-      "command": "amdb",
-      "args": ["mcp", "start"]
+  "results": [
+    {
+      "file": "src/db/connection.rs",
+      "symbol": "connect_pool",
+      "score": 0.89,
+      "type": "function",
+      "context": "..."
     }
-  }
+  ]
 }
 ```
 
-Now you can ask Claude: *"What is the relationship between `User` and `Session` structs in this project?"*
+---
+
+## Roadmap
+
+- **v0.2.0:** Improved Semantic Ranking & Caching
+- **v0.3.0:** `llms.txt` Generator – Automatically generate context files for LLMs.
 
 ---
 
-## 🗺️ Roadmap
-
-- [x] **Phase 1: Local Context Map** (Complete)
-    - Real-time file watching, Tree-sitter parsing, SQLite Graph storage.
-- [ ] **Phase 2: Semantic Vector Sync** (In Progress)
-    - Hybrid search combining Deterministic Graph + Semantic Embeddings.
-
----
-
-## 📄 License
-
-This project is licensed under the [MIT License](LICENSE).
+<div align="center">
+  <sub>Built with ❤️ in Rust</sub>
+</div>
