@@ -85,6 +85,7 @@ cargo install --path .
 
 Control amdb's behavior using `amdb.toml` in your project root:
 
+```toml
 server_port = 3000
 exclude_patterns = [
     "target",
@@ -93,7 +94,7 @@ exclude_patterns = [
     ".git",
     "secret_folder"
 ]
-
+'''
 ---
 
 ## API Usage
@@ -107,6 +108,8 @@ curl -X GET "http://localhost:3000/search?q=database connection"
 ```
 
 **Response Example:**
+
+```json
 [
   {
     "score": 0.89,
