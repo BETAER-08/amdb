@@ -46,6 +46,18 @@ pub fn init(conn: &Connection) -> Result<()> {
         )",
         [],
     )?;
+    
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS warnings (
+            id INTEGER PRIMARY KEY,
+            file_path TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            message TEXT NOT NULL,
+            line INTEGER NOT NULL,
+            UNIQUE(file_path, line, kind)
+        )",
+        [],
+    )?;
 
     Ok(())
 }

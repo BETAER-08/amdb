@@ -40,12 +40,19 @@ impl Indexer {
                         match CodeParser::new(lang) {
                             Ok(mut parser) => {
                                 match parser.parse(&path_str, &content) {
-                                    Ok((symbols, graph, _)) => {
+                                    Ok((symbols, graph, _, warnings)) => {
                                         if let Err(e) = db.save_symbols(&path_str, &symbols) {
                                             eprintln!("  ❌ DB Save Error (Symbols): {}", e);
                                         }
                                         if let Err(e) = db.save_relationships(&path_str, &graph) {
                                             eprintln!("  ❌ DB Save Error (Rels): {}", e);
+                                        }
+                                        
+                                        if !warnings.is_empty() {
+                                            if let Err(e) = db.save_warnings(&path_str, &warnings) {
+                                                eprintln!("  ❌ DB Save Error (Warnings): {}", e);
+                                            }
+                                            println!("  🚨 {} Security warning(s) found in {}", warnings.len(), style(&path_str).red());
                                         }
                                         
                                         println!("  + Indexed: {}", style(&path_str).dim());

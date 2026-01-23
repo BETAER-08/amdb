@@ -1,6 +1,6 @@
 use rusqlite::{Connection, Result};
 use serde::Serialize; 
-use crate::core::parser::CodeSymbol;
+use crate::core::parser::{CodeSymbol, CodeWarning};
 use crate::core::graph::DependencyGraph;
 
 #[derive(Debug, Serialize)]
@@ -119,5 +119,38 @@ impl ContextDb {
         }
 
         Ok(rels)
+    }
+
+    pub fn save_warnings(&mut self, file_path: &str, warnings: &[CodeWarning]) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        tx.execute("DELETE FROM warnings WHERE file_path = ?", [file_path])?;
+
+        {
+            let mut stmt = tx.prepare(
+                "INSERT INTO warnings (file_path, kind, message, line) VALUES (?, ?, ?, ?)"
+            )?;
+            for w in warnings {
+                stmt.execute((file_path, &w.kind, &w.message, w.line))?;
+            }
+        }
+        tx.commit()
+    }
+
+    pub fn get_warnings(&self, file_path: &str) -> Result<Vec<CodeWarning>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT kind, message, line FROM warnings WHERE file_path = ?"
+        )?;
+        
+        let rows = stmt.query_map([file_path], |row| {
+            Ok(CodeWarning {
+                kind: row.get(0)?,
+                message: row.get(1)?,
+                line: row.get(2)?,
+            })
+        })?;
+
+        let mut warnings = Vec::new();
+        for w in rows { warnings.push(w?); }
+        Ok(warnings)
     }
 }

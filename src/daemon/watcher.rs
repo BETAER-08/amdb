@@ -70,7 +70,7 @@ impl SystemWatcher {
         
         let mut parser = CodeParser::new(lang)?;
         
-        let (symbols, graph, _) = parser.parse(file_path, &content)?;
+        let (symbols, graph, _, warnings) = parser.parse(file_path, &content)?;
 
         let ctx_path = Path::new(".amdb");
         if !ctx_path.exists() { return Ok(()); }
@@ -79,8 +79,13 @@ impl SystemWatcher {
         
         db.save_symbols(file_path, &symbols)?;
         db.save_relationships(file_path, &graph)?;
+        db.save_warnings(file_path, &warnings)?;
 
-        println!("{}", style(format!("Synced: {}", file_path)).green());
+        if !warnings.is_empty() {
+            println!("{}", style(format!("🚨 Security Alert in: {}", file_path)).red().bold());
+        } else {
+            println!("{}", style(format!("Synced: {}", file_path)).green());
+        }
         Ok(())
     }
 }

@@ -1,9 +1,28 @@
 use anyhow::Result;
 use tree_sitter::{Parser, Query, QueryCursor, Node};
 use serde::{Serialize, Deserialize};
+use regex::Regex;
+use lazy_static::lazy_static;
 
 pub use super::languages::SupportedLanguage;
 use super::graph::DependencyGraph;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodeWarning {
+    pub kind: String,
+    pub message: String,
+    pub line: usize,
+}
+
+lazy_static! {
+    static ref SECRET_PATTERNS: Vec<(&'static str, Regex)> = vec![
+        ("AWS API Key", Regex::new(r"(?i)AKIA[0-9A-Z]{16}").unwrap()),
+        ("Google API Key", Regex::new(r"AIza[0-9A-Za-z\\-_]{35}").unwrap()),
+        ("Slack Token", Regex::new(r"xox[baprs]-([0-9a-zA-Z]{10,48})").unwrap()),
+        ("Private Key", Regex::new(r"-----BEGIN [A-Z ]+ PRIVATE KEY-----").unwrap()),
+        ("Hardcoded JWT", Regex::new(r"ey[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*").unwrap()),
+    ];
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodeSymbol {
@@ -35,7 +54,7 @@ impl CodeParser {
         Ok(Self { parser, language: lang })
     }
 
-    pub fn parse(&mut self, file_path: &str, code: &str) -> Result<(Vec<CodeSymbol>, DependencyGraph, Vec<CodeRoute>)> {
+    pub fn parse(&mut self, file_path: &str, code: &str) -> Result<(Vec<CodeSymbol>, DependencyGraph, Vec<CodeRoute>, Vec<CodeWarning>)> {
         let tree = self.parser.parse(code, None)
             .ok_or_else(|| anyhow::anyhow!("Parsing failed"))?;
         
@@ -47,6 +66,20 @@ impl CodeParser {
         let mut symbols = Vec::new();
         let mut routes = Vec::new();
         let mut graph = DependencyGraph::new();
+        let mut warnings = Vec::new(); 
+
+        for (name, re) in SECRET_PATTERNS.iter() {
+            for cap in re.captures_iter(code) {
+                if let Some(m) = cap.get(0) {
+                    let line = code[..m.start()].lines().count() + 1; 
+                    warnings.push(CodeWarning {
+                        kind: "Secret Leak".to_string(),
+                        message: format!("Hardcoded {} detected. Risk level: CRITICAL.", name),
+                        line,
+                    });
+                }
+            }
+        }
 
         for m in cursor.matches(&query, tree.root_node(), code.as_bytes()) {
             let mut kind = String::new();
@@ -82,7 +115,7 @@ impl CodeParser {
 
             if !name.is_empty() && !kind.is_empty() {
                 symbols.push(CodeSymbol {
-                    kind, name, line: m.pattern_index, // 임시로 패턴 인덱스 사용
+                    kind, name, line: m.pattern_index, 
                     docstring, signature, is_public
                 });
             }
@@ -94,7 +127,7 @@ impl CodeParser {
             }
         }
         
-        Ok((symbols, graph, routes))
+        Ok((symbols, graph, routes, warnings))
     }
 
     fn find_parent_function(&self, node: Node, code: &str) -> Option<String> {

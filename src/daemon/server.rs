@@ -7,7 +7,7 @@ use serde::Serialize;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use crate::db::ContextDb;
-use crate::core::parser::CodeSymbol;
+use crate::core::parser::{CodeSymbol, CodeWarning}; 
 
 #[derive(Clone)]
 struct AppState {
@@ -19,6 +19,7 @@ struct ContextResponse {
     file: String,
     symbols: Vec<CodeSymbol>,
     relationships: Vec<crate::db::query::Relationship>,
+    warnings: Vec<CodeWarning>,
 }
 
 pub async fn start_server() -> anyhow::Result<()> {
@@ -46,10 +47,12 @@ async fn get_context(
     
     let symbols = db.get_symbols(&file_path).unwrap_or_default();
     let relationships = db.get_relationships(&file_path).unwrap_or_default();
+    let warnings = db.get_warnings(&file_path).unwrap_or_default(); 
 
     Json(ContextResponse {
         file: file_path,
         symbols,
         relationships,
+        warnings, 
     })
 }
