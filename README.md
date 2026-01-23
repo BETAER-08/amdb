@@ -94,7 +94,7 @@ exclude_patterns = [
     ".git",
     "secret_folder"
 ]
-'''
+```
 ---
 
 ## API Usage
