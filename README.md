@@ -17,7 +17,7 @@ You don't need Rust installed. Just run this script to install the latest binary
 Works on **macOS** (Intel/Apple Silicon) and **Linux** (including WSL).
 
 ```bash
-curl --proto '=https' --tlsv1.2 -LsSf [https://github.com/your-username/amdb/releases/latest/download/amdb-installer.sh](https://github.com/your-username/amdb/releases/latest/download/amdb-installer.sh) | sh
+curl --proto '=https' --tlsv1.2 -LsSf [https://github.com/BETAER-08/amdb/releases/latest/download/amdb-installer.sh](https://github.com/BETAER-08/amdb/releases/latest/download/amdb-installer.sh) | sh
 ```
 Option 2: Manual Download
 Prefer to download the file yourself? Go to the Releases Page and download the version for your OS.
@@ -25,8 +25,9 @@ Prefer to download the file yourself? Go to the Releases Page and download the v
 Option 3: Install via Cargo
 If you have the Rust toolchain installed:
 
-Bash
+```Bash
 cargo install amdb
+```
 
 ## 🚀 Quick Start
 
