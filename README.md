@@ -18,6 +18,7 @@ Works on **macOS** (Intel/Apple Silicon) and **Linux** (including WSL).
 
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf [https://github.com/your-username/amdb/releases/latest/download/amdb-installer.sh](https://github.com/your-username/amdb/releases/latest/download/amdb-installer.sh) | sh
+```
 Option 2: Manual Download
 Prefer to download the file yourself? Go to the Releases Page and download the version for your OS.
 
