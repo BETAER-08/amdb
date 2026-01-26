@@ -68,8 +68,17 @@ This creates a targeted summary (e.g., in `.amdb/`) containing only the symbols 
 
 - **Rust** (`.rs`)
 - **Python** (`.py`)
-- **JavaScript** (`.js`)
+- **JavaScript** (`.js`, `.jsx`, `.mjs`)
 - **TypeScript** (`.ts`, `.tsx`)
+- **C** (`.c`, `.h`)
+- **C++** (`.cpp`, `.hpp`, `.cc`, `.cxx`)
+- **Go** (`.go`)
+- **Java** (`.java`)
+- **Ruby** (`.rb`)
+- **HTML** (`.html`, `.htm`)
+- **CSS** (`.css`)
+- **JSON** (`.json`)
+- **Bash** (`.sh`, `.bash`)
 
 ---
 
