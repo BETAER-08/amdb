@@ -37,7 +37,6 @@ tree-sitter-php = "0.23"
 tree-sitter-html = "0.23"
 tree-sitter-css = "0.23"
 tree-sitter-json = "0.23"
-tree-sitter-yaml = "0.23"
 tree-sitter-bash = "0.23"
 rusqlite = { version = "0.30", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }
