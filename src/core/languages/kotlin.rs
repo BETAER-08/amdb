@@ -5,7 +5,7 @@ extern "C" {
 }
 
 pub fn language() -> Language {
-    unsafe { Language::from_raw(tree_sitter_kotlin()) }
+    unsafe { Language::from_raw(tree_sitter_kotlin() as *const _) }
 }
 
 pub const QUERY: &str = r#"
