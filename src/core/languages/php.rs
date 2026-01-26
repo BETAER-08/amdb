@@ -1,7 +1,7 @@
 use tree_sitter::Language;
 
 pub fn language() -> Language {
-    tree_sitter_php::language_php()
+    tree_sitter_php::LANGUAGE_PHP.into()
 }
 
 pub const QUERY: &str = r#"

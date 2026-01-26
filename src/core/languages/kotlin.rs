@@ -1,7 +1,11 @@
 use tree_sitter::Language;
 
+extern "C" {
+    fn tree_sitter_kotlin() -> *const ();
+}
+
 pub fn language() -> Language {
-    tree_sitter_kotlin::language()
+    unsafe { Language::from_raw(tree_sitter_kotlin()) }
 }
 
 pub const QUERY: &str = r#"

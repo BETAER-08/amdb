@@ -1,7 +1,7 @@
 use tree_sitter::Language;
 
 pub fn language() -> Language {
-    tree_sitter_swift::language()
+    tree_sitter_swift::LANGUAGE.into()
 }
 
 pub const QUERY: &str = r#"
