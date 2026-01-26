@@ -5,7 +5,7 @@ pub fn language() -> Language {
 }
 
 pub const QUERY: &str = r#"
-(class name: (constant) @name) @class
-(module name: (constant) @name) @module
-(method name: (identifier) @name) @method
+    (method name: (identifier) @Function)
+    (class name: (constant) @Class)
+    (call method: (identifier) @Call)
 "#;

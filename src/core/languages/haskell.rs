@@ -5,8 +5,7 @@ pub fn language() -> Language {
 }
 
 pub const QUERY: &str = r#"
-(function name: (variable) @name) @function
-(data_type name: (type) @name) @struct
-(newtype name: (type) @name) @struct
-(class name: (type) @name) @interface
+    (function name: (variable) @Function)
+    (type name: (type_name) @Class)
+    (exp_apply function: (variable) @Call)
 "#;

@@ -11,11 +11,11 @@ pub mod java;
 pub mod c_sharp;
 pub mod php;
 pub mod ruby;
-pub mod swift;
-pub mod kotlin;
+// pub mod swift;
+// pub mod kotlin;
 pub mod scala;
 pub mod haskell;
-pub mod lua;
+// pub mod lua;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SupportedLanguage {
@@ -31,34 +31,30 @@ pub enum SupportedLanguage {
     CSharp,
     Php,
     Ruby,
-    Swift,
-    Kotlin,
-    Scala,
-    Haskell,
-    Lua,
-}
+// Swift,
+// Kotlin,
+// Lua,}
 
 impl SupportedLanguage {
     pub fn from_path(path: &Path) -> Option<Self> {
-        let ext = path.extension()?.to_str()?;
-        match ext {
+        match path.extension()?.to_str()? {
             "rs" => Some(Self::Rust),
             "py" => Some(Self::Python),
             "js" | "jsx" | "mjs" => Some(Self::JavaScript),
             "ts" => Some(Self::TypeScript),
             "tsx" => Some(Self::Tsx),
-            "go" => Some(Self::Go),
             "c" | "h" => Some(Self::C),
             "cpp" | "hpp" | "cc" | "cxx" => Some(Self::Cpp),
-            "java" => Some(Self::Java),
             "cs" => Some(Self::CSharp),
+            "go" => Some(Self::Go),
+            "java" => Some(Self::Java),
+            // "kt" | "kts" => Some(Self::Kotlin),
+            // "lua" => Some(Self::Lua),
             "php" => Some(Self::Php),
             "rb" => Some(Self::Ruby),
-            "swift" => Some(Self::Swift),
-            "kt" | "kts" => Some(Self::Kotlin),
             "scala" | "sc" => Some(Self::Scala),
-            "hs" => Some(Self::Haskell),
-            "lua" => Some(Self::Lua),
+            // "swift" => Some(Self::Swift),
+            "hs" | "lhs" => Some(Self::Haskell),
             _ => None,
         }
     }
@@ -70,18 +66,18 @@ impl SupportedLanguage {
             Self::JavaScript => javascript::language_js(),
             Self::TypeScript => javascript::language_ts(),
             Self::Tsx => javascript::language_tsx(),
-            Self::Go => go::language(),
             Self::C => c::language(),
             Self::Cpp => cpp::language(),
-            Self::Java => java::language(),
             Self::CSharp => c_sharp::language(),
+            Self::Go => go::language(),
+            Self::Java => java::language(),
+            // Self::Kotlin => kotlin::language(),
+            // Self::Lua => lua::language(),
             Self::Php => php::language(),
             Self::Ruby => ruby::language(),
-            Self::Swift => swift::language(),
-            Self::Kotlin => kotlin::language(),
             Self::Scala => scala::language(),
+            // Self::Swift => swift::language(),
             Self::Haskell => haskell::language(),
-            Self::Lua => lua::language(),
         }
     }
 
@@ -97,11 +93,11 @@ impl SupportedLanguage {
             Self::CSharp => c_sharp::QUERY,
             Self::Php => php::QUERY,
             Self::Ruby => ruby::QUERY,
-            Self::Swift => swift::QUERY,
-            Self::Kotlin => kotlin::QUERY,
+            // Self::Swift => swift::QUERY,
+            // Self::Kotlin => kotlin::QUERY,
             Self::Scala => scala::QUERY,
             Self::Haskell => haskell::QUERY,
-            Self::Lua => lua::QUERY,
+            // Self::Lua => lua::QUERY,
         }
     }
 }

@@ -5,8 +5,7 @@ pub fn language() -> Language {
 }
 
 pub const QUERY: &str = r#"
-(class_declaration name: (identifier) @name) @class
-(interface_declaration name: (identifier) @name) @interface
-(method_declaration name: (identifier) @name) @method
-(enum_declaration name: (identifier) @name) @enum
+    (method_declaration name: (identifier) @Function)
+    (class_declaration name: (identifier) @Class)
+    (method_invocation name: (identifier) @Call)
 "#;

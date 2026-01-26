@@ -1,13 +1,11 @@
 use tree_sitter::Language;
 
 pub fn language() -> Language {
-    let lang = tree_sitter_kotlin::language();
-    unsafe { std::mem::transmute(lang) }
+    tree_sitter_kotlin::LANGUAGE.into()
 }
 
 pub const QUERY: &str = r#"
-(class_declaration name: (simple_identifier) @name) @class
-(object_declaration name: (simple_identifier) @name) @class
-(function_declaration name: (simple_identifier) @name) @function
-(interface_declaration name: (simple_identifier) @name) @interface
+    (function_declaration name: (simple_identifier) @Function)
+    (class_declaration name: (simple_identifier) @Class)
+    (call_expression expression: (simple_identifier) @Call)
 "#;

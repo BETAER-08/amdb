@@ -5,8 +5,8 @@ pub fn language() -> Language {
 }
 
 pub const QUERY: &str = r#"
-(function_definition declarator: (function_declarator declarator: (identifier) @name)) @function
-(class_specifier name: (type_identifier) @name) @class
-(struct_specifier name: (type_identifier) @name) @struct
-(template_declaration (class_specifier name: (type_identifier) @name)) @class
+    (function_definition declarator: (function_declarator declarator: (identifier) @Function))
+    (class_specifier name: (type_identifier) @Class)
+    (struct_specifier name: (type_identifier) @Struct)
+    (call_expression function: (identifier) @Call)
 "#;

@@ -5,5 +5,6 @@ pub fn language() -> Language {
 }
 
 pub const QUERY: &str = r#"
-(function_declaration name: [(identifier) (dot_index_expression)] @name) @function
+    (function_definition name: (function_name) @Function)
+    (function_call name: (identifier) @Call)
 "#;
