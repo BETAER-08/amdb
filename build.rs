@@ -7,7 +7,8 @@ fn main() {
     for lang in langs {
         let src_dir = root.join(format!("tree-sitter-{}", lang)).join("src");
         if !src_dir.exists() {
-            println!("cargo:warning=Tree-sitter source for {} not found at {:?}", lang, src_dir);
+            let abs_path = std::fs::canonicalize(".").unwrap_or_default().join(&src_dir);
+            println!("cargo:warning=Tree-sitter source for {} not found at {:?} (Abs: {:?})", lang, src_dir, abs_path);
             continue;
         }
 
