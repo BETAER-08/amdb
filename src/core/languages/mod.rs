@@ -59,7 +59,6 @@ impl SupportedLanguage {
             "html" | "htm" => Some(Self::Html),
             "css" => Some(Self::Css),
             "json" => Some(Self::Json),
-            "yaml" | "yml" => Some(Self::Yaml),
             "sh" | "bash" => Some(Self::Bash),
             _ => None,
         }
@@ -82,7 +81,6 @@ impl SupportedLanguage {
             Self::Html => html::language(),
             Self::Css => css::language(),
             Self::Json => json::language(),
-            Self::Yaml => yaml::language(),
             Self::Bash => bash::language(),
         }
     }
@@ -102,7 +100,6 @@ impl SupportedLanguage {
             Self::Html => html::QUERY,
             Self::Css => css::QUERY,
             Self::Json => json::QUERY,
-            Self::Yaml => yaml::QUERY,
             Self::Bash => bash::QUERY,
         }
     }
