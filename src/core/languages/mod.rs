@@ -11,7 +11,7 @@ pub mod java;
 pub mod c_sharp;
 pub mod php;
 pub mod ruby;
-// pub mod swift;
+pub mod swift;
 // pub mod kotlin;
 pub mod scala;
 pub mod haskell;
@@ -32,8 +32,10 @@ pub enum SupportedLanguage {
     Php,
     Ruby,
     Swift,
-    Kotlin,
-    Lua,
+    // Kotlin,
+    // Lua,
+    Scala,
+    Haskell,
 }
 
 impl SupportedLanguage {
@@ -49,8 +51,8 @@ impl SupportedLanguage {
             "cs" => Some(Self::CSharp),
             "go" => Some(Self::Go),
             "java" => Some(Self::Java),
-            "kt" | "kts" => Some(Self::Kotlin),
-             "lua" => Some(Self::Lua),
+            // "kt" | "kts" => Some(Self::Kotlin),
+            // "lua" => Some(Self::Lua),
             "php" => Some(Self::Php),
             "rb" => Some(Self::Ruby),
             "scala" | "sc" => Some(Self::Scala),
@@ -72,8 +74,8 @@ impl SupportedLanguage {
             Self::CSharp => c_sharp::language(),
             Self::Go => go::language(),
             Self::Java => java::language(),
-            Self::Kotlin => kotlin::language(),
-            Self::Lua => lua::language(),
+            // Self::Kotlin => kotlin::language(),
+            // Self::Lua => lua::language(),
             Self::Php => php::language(),
             Self::Ruby => ruby::language(),
             Self::Scala => scala::language(),
@@ -95,10 +97,10 @@ impl SupportedLanguage {
             Self::Php => php::QUERY,
             Self::Ruby => ruby::QUERY,
             Self::Swift => swift::QUERY,
-            Self::Kotlin => kotlin::QUERY,
+            // Self::Kotlin => kotlin::QUERY,
             Self::Scala => scala::QUERY,
             Self::Haskell => haskell::QUERY,
-            Self::Lua => lua::QUERY,
+            // Self::Lua => lua::QUERY,
         }
     }
 }
