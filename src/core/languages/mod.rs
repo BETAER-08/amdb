@@ -8,16 +8,11 @@ pub mod c;
 pub mod cpp;
 pub mod go;
 pub mod java;
-pub mod csharp;
 pub mod ruby;
-pub mod php;
 pub mod html;
 pub mod css;
-pub mod dart;
 pub mod json;
-pub mod yaml;
 pub mod bash;
-pub mod toml;
 
 #[derive(Debug, Clone, Copy)]
 pub enum SupportedLanguage {
@@ -30,15 +25,11 @@ pub enum SupportedLanguage {
     Cpp,
     Go,
     Java,
-    CSharp,
     Ruby,
-    Php,
     Html,
     Css,
     Json,
-    Yaml,
     Bash,
-    Toml,
 }
 
 impl SupportedLanguage {
