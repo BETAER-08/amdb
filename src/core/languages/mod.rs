@@ -44,7 +44,6 @@ impl SupportedLanguage {
             "cpp" | "hpp" | "cc" | "cxx" => Some(Self::Cpp),
             "go" => Some(Self::Go),
             "java" => Some(Self::Java),
-            "cs" => Some(Self::CSharp),
             "rb" => Some(Self::Ruby),
             "html" | "htm" => Some(Self::Html),
             "css" => Some(Self::Css),
