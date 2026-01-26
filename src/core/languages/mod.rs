@@ -1,10 +1,23 @@
 use std::path::Path;
 use tree_sitter::Language;
 
-// 하위 모듈들 등록
 pub mod rust;
 pub mod python;
 pub mod javascript;
+pub mod c;
+pub mod cpp;
+pub mod go;
+pub mod java;
+pub mod csharp;
+pub mod ruby;
+pub mod php;
+pub mod html;
+pub mod css;
+pub mod dart;
+pub mod json;
+pub mod yaml;
+pub mod bash;
+pub mod toml;
 
 #[derive(Debug, Clone, Copy)]
 pub enum SupportedLanguage {
@@ -13,6 +26,20 @@ pub enum SupportedLanguage {
     JavaScript,
     TypeScript,
     Tsx,
+    C,
+    Cpp,
+    Go,
+    Java,
+    CSharp,
+    Ruby,
+    Php,
+    Html,
+    Css,
+    Dart,
+    Json,
+    Yaml,
+    Bash,
+    Toml,
 }
 
 impl SupportedLanguage {
@@ -23,6 +50,20 @@ impl SupportedLanguage {
             "js" | "jsx" | "mjs" => Some(Self::JavaScript),
             "ts" => Some(Self::TypeScript),
             "tsx" => Some(Self::Tsx),
+            "c" | "h" => Some(Self::C),
+            "cpp" | "hpp" | "cc" | "cxx" => Some(Self::Cpp),
+            "go" => Some(Self::Go),
+            "java" => Some(Self::Java),
+            "cs" => Some(Self::CSharp),
+            "rb" => Some(Self::Ruby),
+            "php" => Some(Self::Php),
+            "html" | "htm" => Some(Self::Html),
+            "css" => Some(Self::Css),
+            "dart" => Some(Self::Dart),
+            "json" => Some(Self::Json),
+            "yaml" | "yml" => Some(Self::Yaml),
+            "sh" | "bash" => Some(Self::Bash),
+            "toml" => Some(Self::Toml),
             _ => None,
         }
     }
@@ -34,6 +75,20 @@ impl SupportedLanguage {
             Self::JavaScript => javascript::language_js(),
             Self::TypeScript => javascript::language_ts(),
             Self::Tsx => javascript::language_tsx(),
+            Self::C => c::language(),
+            Self::Cpp => cpp::language(),
+            Self::Go => go::language(),
+            Self::Java => java::language(),
+            Self::CSharp => csharp::language(),
+            Self::Ruby => ruby::language(),
+            Self::Php => php::language(),
+            Self::Html => html::language(),
+            Self::Css => css::language(),
+            Self::Dart => dart::language(),
+            Self::Json => json::language(),
+            Self::Yaml => yaml::language(),
+            Self::Bash => bash::language(),
+            Self::Toml => toml::language(),
         }
     }
 
@@ -42,6 +97,20 @@ impl SupportedLanguage {
             Self::Rust => rust::QUERY,
             Self::Python => python::QUERY,
             Self::JavaScript | Self::TypeScript | Self::Tsx => javascript::QUERY,
+            Self::C => c::QUERY,
+            Self::Cpp => cpp::QUERY,
+            Self::Go => go::QUERY,
+            Self::Java => java::QUERY,
+            Self::CSharp => csharp::QUERY,
+            Self::Ruby => ruby::QUERY,
+            Self::Php => php::QUERY,
+            Self::Html => html::QUERY,
+            Self::Css => css::QUERY,
+            Self::Dart => dart::QUERY,
+            Self::Json => json::QUERY,
+            Self::Yaml => yaml::QUERY,
+            Self::Bash => bash::QUERY,
+            Self::Toml => toml::QUERY,
         }
     }
 }
