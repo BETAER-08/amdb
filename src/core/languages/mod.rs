@@ -61,7 +61,6 @@ impl SupportedLanguage {
             "json" => Some(Self::Json),
             "yaml" | "yml" => Some(Self::Yaml),
             "sh" | "bash" => Some(Self::Bash),
-            "toml" => Some(Self::Toml),
             _ => None,
         }
     }
@@ -85,7 +84,6 @@ impl SupportedLanguage {
             Self::Json => json::language(),
             Self::Yaml => yaml::language(),
             Self::Bash => bash::language(),
-            Self::Toml => toml::language(),
         }
     }
 
@@ -106,7 +104,6 @@ impl SupportedLanguage {
             Self::Json => json::QUERY,
             Self::Yaml => yaml::QUERY,
             Self::Bash => bash::QUERY,
-            Self::Toml => toml::QUERY,
         }
     }
 }
