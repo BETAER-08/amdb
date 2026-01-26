@@ -62,6 +62,7 @@ dependencies = [
  "anyhow",
  "axum",
  "bincode",
+ "cc",
  "clap",
  "console",
  "fastembed",

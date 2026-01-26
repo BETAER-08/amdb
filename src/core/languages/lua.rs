@@ -1,7 +1,11 @@
 use tree_sitter::Language;
 
+extern "C" {
+    fn tree_sitter_lua() -> Language;
+}
+
 pub fn language() -> Language {
-    tree_sitter_lua::LANGUAGE.into()
+    unsafe { tree_sitter_lua() }
 }
 
 pub const QUERY: &str = r#"

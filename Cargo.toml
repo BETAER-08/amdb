@@ -34,11 +34,9 @@ tree-sitter-java = "0.23.0"
 tree-sitter-c-sharp = "0.23.0"
 tree-sitter-ruby = "0.23.0"
 tree-sitter-php = "0.23.1"
-# tree-sitter-kotlin = "0.3.7"
 tree-sitter-swift = "0.7.1"
 tree-sitter-scala = "0.23.2"
 tree-sitter-haskell = "0.23.0"
-# tree-sitter-lua = "0.2.0"
 rusqlite = { version = "0.30", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -49,6 +47,10 @@ fastembed = "4"
 ordered-float = "4.0"
 toml = "0.8"
 bincode = "1.3"
+
+
+[build-dependencies]
+cc = "1.0"
 
 [profile.release]
 lto = true
