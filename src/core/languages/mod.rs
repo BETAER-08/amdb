@@ -8,7 +8,9 @@ pub mod c;
 pub mod cpp;
 pub mod go;
 pub mod java;
+pub mod csharp;
 pub mod ruby;
+pub mod php;
 pub mod html;
 pub mod css;
 pub mod json;
@@ -25,7 +27,9 @@ pub enum SupportedLanguage {
     Cpp,
     Go,
     Java,
+    CSharp,
     Ruby,
+    Php,
     Html,
     Css,
     Json,
@@ -44,7 +48,9 @@ impl SupportedLanguage {
             "cpp" | "hpp" | "cc" | "cxx" => Some(Self::Cpp),
             "go" => Some(Self::Go),
             "java" => Some(Self::Java),
+            "cs" => Some(Self::CSharp),
             "rb" => Some(Self::Ruby),
+            "php" => Some(Self::Php),
             "html" | "htm" => Some(Self::Html),
             "css" => Some(Self::Css),
             "json" => Some(Self::Json),
@@ -64,7 +70,9 @@ impl SupportedLanguage {
             Self::Cpp => cpp::language(),
             Self::Go => go::language(),
             Self::Java => java::language(),
+            Self::CSharp => csharp::language(),
             Self::Ruby => ruby::language(),
+            Self::Php => php::language(),
             Self::Html => html::language(),
             Self::Css => css::language(),
             Self::Json => json::language(),
@@ -81,7 +89,9 @@ impl SupportedLanguage {
             Self::Cpp => cpp::QUERY,
             Self::Go => go::QUERY,
             Self::Java => java::QUERY,
+            Self::CSharp => csharp::QUERY,
             Self::Ruby => ruby::QUERY,
+            Self::Php => php::QUERY,
             Self::Html => html::QUERY,
             Self::Css => css::QUERY,
             Self::Json => json::QUERY,
