@@ -4,7 +4,7 @@
 ![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)
 
 ## ⚡ 컨텍스트 문제
-AI 코딩 어시스턴트(Cursor, Windsurf, Claude)는 강력하지만, **눈이 멀어 있습니다**. 이들은 여러분이 열어놓은 파일만 볼 수 있습니다. 여러분의 머릿속에 있는 전체 코드베이스에 대한 깊고 구조적인 이해가 부족합니다.
+AI 코딩 어시스턴트(Cursor, Windsurf, Claude)는 강력하지만, **볼수 았는 정보가 한정적입니다**. 이들은 여러분이 열어놓은 파일만 볼 수 있습니다. 여러분의 머릿속에 있는 전체 코드베이스에 대한 깊고 구조적인 이해가 부족합니다.
 
 **`amdb` (Agent Memory Database)가 이 문제를 해결합니다.** 로컬 프로젝트를 스캔하고, 코드의 벡터 인덱스를 구축하며, **단일하고 고도로 최적화된 마크다운 컨텍스트 파일**을 생성합니다. 이 파일을 AI에게 제공하면, AI가 즉시 프로젝트의 아키텍처, 종속성 및 로직을 이해하는 것을 볼 수 있습니다.
 
@@ -20,7 +20,7 @@ Rust를 설치할 필요가 없습니다. 이 스크립트를 실행하면 최�
 curl --proto '=https' --tlsv1.2 -LsSf [https://github.com/BETAER-08/amdb/releases/latest/download/amdb-installer.sh](https://github.com/BETAER-08/amdb/releases/latest/download/amdb-installer.sh) | sh
 ```
 옵션 2: 수동 다운로드
-직접 파일을 다운로드하시겠습니까? 릴리스 페이지로 이동하여 운영 체제에 맞는 버전을 다운로드하세요.
+직접 파일을 다운로드 받고 싶다면 릴리스 페이지로 이동하여 운영 체제에 맞는 버전을 다운로드하세요. (현재 윈도우는 제공되지 않습니다)
 
 옵션 3: Cargo를 통한 설치
 Rust 툴체인이 설치되어 있다면:
@@ -64,7 +64,7 @@ amdb generate --focus "login authentication jwt"
 
 ## 🛠 지원되는 언어
 
-`amdb`는 강력한 Tree-sitter 파서를 사용하여 다음의 구문과 구조를 완전히 이해합니다:
+`amdb`는 Tree-sitter 파서를 사용하여 다음의 구문과 구조를 완전히 이해합니다:
 
 - **Rust** (`.rs`)
 - **Python** (`.py`)
