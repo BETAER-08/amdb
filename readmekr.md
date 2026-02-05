@@ -20,8 +20,7 @@ Rust를 설치할 필요가 없습니다. 이 스크립트를 실행하면 최�
 curl --proto '=https' --tlsv1.2 -LsSf [https://github.com/BETAER-08/amdb/releases/latest/download/amdb-installer.sh](https://github.com/BETAER-08/amdb/releases/latest/download/amdb-installer.sh) | sh
 ```
 옵션 2: 수동 다운로드
-직접 파일을 다운로드 받고 싶다면 릴리스 페이지로 이동하여 운영 체제에 맞는 버전을 다운로드하세요. (현재 윈도우는 제공되지 않습니다)
-
+직접 파일을 다운로드 받고 싶다면 릴리스 페이지로 이동하여 운영 체제에 맞는 버전을 다운로드하세요. 
 옵션 3: Cargo를 통한 설치
 Rust 툴체인이 설치되어 있다면:
 
