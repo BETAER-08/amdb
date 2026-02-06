@@ -2,11 +2,11 @@
 name = "amdb"
 version = "0.2.1"
 edition = "2021"
-description = "Agent Memory Database - The Open Standard for AI Context Memory"
+description = "Turn your codebase into AI context. A high-performance context generator for LLMs (Cursor, Claude) using Tree-sitter and Vector Search."
 license = "MIT"
 repository = "https://github.com/BETAER-08/amdb"
-keywords = ["ai", "context", "memory", "database", "cli"]
-categories = ["command-line-utilities", "development-tools"]
+keywords = ["llm", "context-generator", "ai-agent", "developer-tools", "code-analysis"]
+categories = ["command-line-utilities", "development-tools", "text-processing"]
 
 [[bin]]
 name = "amdb"
@@ -54,7 +54,6 @@ lto = true
 strip = true
 opt-level = 3
 
-# The profile that 'dist' will build with
 [profile.dist]
 inherits = "release"
 lto = "thin"
