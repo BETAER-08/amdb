@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::io::{BufReader, BufWriter};
+use std::cmp::Ordering; // 추가됨
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VectorRecord {
@@ -57,7 +58,6 @@ impl VectorStore {
         });
     }
 
-    // 추가됨: 특정 파일의 벡터 데이터 삭제
     pub fn remove_by_file(&mut self, file_path: &str) {
         let keys_to_remove: Vec<String> = self.records.iter()
             .filter(|(_, record)| record.file_path == file_path)
@@ -77,7 +77,10 @@ impl VectorStore {
             })
             .collect();
 
-        results.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
+        results.sort_by(|a, b| {
+            b.0.partial_cmp(&a.0).unwrap_or(Ordering::Equal)
+        });
+
         results.into_iter().take(limit).collect()
     }
 }
