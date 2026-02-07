@@ -4,6 +4,8 @@
 ![Version](https://img.shields.io/badge/version-0.3.1-blue.svg)
 
 ## [korean](readmekr.md)
+---
+## [benchmark](benchmark/benchmark.md)
 
 ## ⚡ The Context Problem
 AI coding assistants (Cursor, Windsurf, Claude) are powerful, **but they are blind**. They only see the files you open. They lack the deep, structural understanding of your entire codebase that you have.
