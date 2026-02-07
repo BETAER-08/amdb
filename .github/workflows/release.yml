@@ -16,32 +16,35 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # 🐧 Linux (x86_64)
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             artifact_name: amdb
             asset_name: amdb-linux-amd64.tar.gz
             use_cross: false
 
+          # 🐧 Linux (ARM64) - 🔥 추가됨!
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             artifact_name: amdb
             asset_name: amdb-linux-aarch64.tar.gz
-            use_cross: false
+            use_cross: true  # ARM 빌드를 위해 cross 사용
 
-          
-
+          # 🍎 macOS (Apple Silicon)
           - os: macos-latest
             target: aarch64-apple-darwin
             artifact_name: amdb
             asset_name: amdb-macos-aarch64.tar.gz
             use_cross: false
 
+          # 🍎 macOS (Intel)
           - os: macos-latest
             target: x86_64-apple-darwin
             artifact_name: amdb
             asset_name: amdb-macos-amd64.tar.gz
             use_cross: false
 
+          # 🪟 Windows (x86_64)
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             artifact_name: amdb.exe
@@ -49,38 +52,68 @@ jobs:
             use_cross: false
 
     steps:
-      # 🔥 [추가됨] Windows 긴 경로 에러 방지 (Tree-sitter 빌드 필수 설정)
+      # 1. Windows 긴 경로 설정
       - name: Enable Long Paths
+        if: matrix.os == 'windows-latest'
         run: git config --system core.longpaths true
 
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # 2. Linux 필수 라이브러리 설치
+      - name: Install Linux Dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev pkg-config build-essential
+
+      # 3. Rust 설치
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
+      # 4. 🔥 Cross 툴 설치 (ARM 빌드용)
+      - name: Install Cross
+        if: matrix.use_cross
+        run: cargo install cross
+
+      # 5. 빌드 (use_cross 여부에 따라 명령어 분기)
       - name: Build
         shell: bash
-        run: cargo build --verbose --release --target ${{ matrix.target }}
+        run: |
+          if [ "${{ matrix.use_cross }}" == "true" ]; then
+            cross build --verbose --release --target ${{ matrix.target }}
+          else
+            cargo build --verbose --release --target ${{ matrix.target }}
+          fi
 
-      # 📦 Linux/macOS 패키징
+      # 6. Linux/macOS 패키징
       - name: Package (Linux/macOS)
         if: matrix.os != 'windows-latest'
         shell: bash
         run: |
           cd target/${{ matrix.target }}/release
-          tar -czf ../../../${{ matrix.asset_name }} ${{ matrix.artifact_name }}
+          if [ -f "${{ matrix.artifact_name }}" ]; then
+            tar -czf ../../../${{ matrix.asset_name }} ${{ matrix.artifact_name }}
+          else
+            echo "::error ::Binary not found!"
+            exit 1
+          fi
           cd ../../..
 
-      # 📦 Windows 패키징 (7z 사용)
+      # 7. Windows 패키징
       - name: Package (Windows)
         if: matrix.os == 'windows-latest'
         shell: bash
         run: |
           cd target/${{ matrix.target }}/release
-          7z a -tzip ../../../${{ matrix.asset_name }} ${{ matrix.artifact_name }}
+          if [ -f "${{ matrix.artifact_name }}" ]; then
+            7z a -tzip ../../../${{ matrix.asset_name }} ${{ matrix.artifact_name }}
+          else
+            echo "::error ::Binary not found!"
+            exit 1
+          fi
           cd ../../..
 
       - name: Upload Release Asset
