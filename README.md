@@ -31,12 +31,11 @@ Prefer to download the file yourself? Go to the Releases Page and download the v
 If you have the Rust toolchain installed:
 
 ```bash
+# Default installation (includes embeddings on non-Windows platforms)
 cargo install amdb
-```
 
-To build with full features on non-Windows platforms:
-```bash
-cargo install amdb --features embeddings
+# Windows or without embeddings
+cargo install amdb --no-default-features
 ```
 
 ## 🚀 Quick Start

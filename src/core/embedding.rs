@@ -35,7 +35,7 @@ impl EmbeddingEngine {
         
         #[cfg(not(feature = "embeddings"))]
         {
-            anyhow::bail!("Embedding feature is not enabled. Please rebuild with --features embeddings")
+            anyhow::bail!("Embedding feature is not available. On Windows, embeddings are not supported due to ONNX Runtime dependency limitations. On other platforms, rebuild with default features enabled.")
         }
     }
 }
