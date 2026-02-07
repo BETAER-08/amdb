@@ -141,9 +141,15 @@ jobs:
         run: |
           ${{ matrix.packages_install }}
       - name: Build artifacts
+        shell: bash
         run: |
           # Actually do builds and make zips and whatnot
-          dist build ${{ needs.plan.outputs.tag-flag }} --print=linkage --output-format=json ${{ matrix.dist_args }} > dist-manifest.json
+          # For Windows builds, disable embeddings feature due to ONNX Runtime compatibility issues
+          if [[ "${{ matrix.dist_args }}" == *"windows"* ]]; then
+            dist build ${{ needs.plan.outputs.tag-flag }} --print=linkage --output-format=json ${{ matrix.dist_args }} --no-default-features > dist-manifest.json
+          else
+            dist build ${{ needs.plan.outputs.tag-flag }} --print=linkage --output-format=json ${{ matrix.dist_args }} > dist-manifest.json
+          fi
           echo "dist ran successfully"
       - id: cargo-dist
         name: Post-build
