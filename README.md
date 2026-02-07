@@ -25,11 +25,18 @@ curl --proto '=https' --tlsv1.2 -LsSf https://github.com/BETAER-08/amdb/releases
 ### Option 2: Manual Download
 Prefer to download the file yourself? Go to the Releases Page and download the version for your OS.
 
+**📌 Windows Users:** Windows binaries are built without the embeddings feature due to ONNX Runtime compatibility issues. The Focus Mode (vector search) feature is not available on Windows, but all other functionality works normally.
+
 ### Option 3: Install via Cargo
 If you have the Rust toolchain installed:
 
 ```bash
 cargo install amdb
+```
+
+To build with full features on non-Windows platforms:
+```bash
+cargo install amdb --features embeddings
 ```
 
 ## 🚀 Quick Start
@@ -61,6 +68,8 @@ amdb generate
 ## 🧠 Advanced Usage: Focus Mode
 
 For large projects, a full context might be too big. Use **Focus Mode** to generate a summary relevant to a specific feature or bug. `amdb` uses vector search to find the most relevant files.
+
+**⚠️ Note:** This feature requires the `embeddings` feature which is not available on Windows builds due to dependency compatibility issues.
 
 ```bash
 # Example: generating context for authentication logic
