@@ -114,6 +114,7 @@ jobs:
       BUILD_MANIFEST_NAME: target/distrib/${{ join(matrix.targets, '-') }}-dist-manifest.json
     steps:
       - name: enable windows longpaths
+        if: ${{ runner.os == 'Windows' }}
         run: |
           git config --global core.longpaths true
       - uses: actions/checkout@v4
