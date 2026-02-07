@@ -12,12 +12,12 @@ pub struct Indexer;
 
 impl Indexer {
     pub fn scan_project(root: &str) -> Result<()> {
-        let db_dir = Path::new(".database");
+        let db_dir = Path::new(root).join(".database");
         let vector_path = db_dir.join("vector");
 
         fs::create_dir_all(&vector_path)?;
 
-        let mut db = ContextDb::open(db_dir)?;
+        let mut db = ContextDb::open(&db_dir)?;
         let mut vector_store = VectorStore::new();
         let embedder = EmbeddingEngine::new()?;
 
@@ -65,17 +65,18 @@ impl Indexer {
         }
 
         vector_store.save(&vector_path)?;
-        println!("Project indexed successfully.");
+        println!("Project indexed successfully at {}", root);
         Ok(())
     }
 
-    pub fn update_file(path: &str) -> Result<()> {
-        let db_dir = Path::new(".database");
+    pub fn update_file(root: &str, path: &str) -> Result<()> {
+        let db_dir = Path::new(root).join(".database");
         let vector_path = db_dir.join("vector");
 
-        let mut db = ContextDb::open(db_dir)?;
+        let mut db = ContextDb::open(&db_dir)?;
         let mut vector_store = VectorStore::load(&vector_path).unwrap_or_else(|_| VectorStore::new());
         let embedder = EmbeddingEngine::new()?;
+
         vector_store.remove_by_file(path);
 
         let path_obj = Path::new(path);
@@ -83,14 +84,11 @@ impl Indexer {
             if let Some(lang) = SupportedLanguage::from_path(path_obj) {
                 if let Ok(mut parser) = CodeParser::new(lang) {
                     if let Ok(code) = fs::read_to_string(path_obj) {
-                        // 파싱
                         if let Ok((symbols, graph, _, warnings)) = parser.parse(path, &code) {
-                            // DB 업데이트 (내부적으로 DELETE 후 INSERT 수행)
                             db.save_symbols(path, &symbols)?;
                             db.save_relationships(path, &graph)?;
                             db.save_warnings(path, &warnings)?;
 
-                            // 벡터 스토어 업데이트
                             for symbol in symbols {
                                 let text = format!(
                                     "File: {}\nName: {}\nKind: {}\nDoc: {}",
@@ -114,11 +112,11 @@ impl Indexer {
         Ok(())
     }
 
-    pub fn remove_file(path: &str) -> Result<()> {
-        let db_dir = Path::new(".database");
+    pub fn remove_file(root: &str, path: &str) -> Result<()> {
+        let db_dir = Path::new(root).join(".database");
         let vector_path = db_dir.join("vector");
 
-        let mut db = ContextDb::open(db_dir)?;
+        let mut db = ContextDb::open(&db_dir)?;
         let mut vector_store = VectorStore::load(&vector_path).unwrap_or_else(|_| VectorStore::new());
 
         db.remove_file_data(path)?;

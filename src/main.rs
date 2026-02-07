@@ -18,8 +18,14 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    Init,
-    Daemon,
+    Init {
+        #[arg(default_value = ".")]
+        path: String,
+    },
+    Daemon {
+        #[arg(default_value = ".")]
+        path: String,
+    },
     Generate {
         #[arg(short, long)]
         focus: Option<String>,
@@ -33,13 +39,13 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Init => {
-            tokio::task::spawn_blocking(|| {
-                Indexer::scan_project(".")
+        Commands::Init { path } => {
+            tokio::task::spawn_blocking(move || {
+                Indexer::scan_project(&path)
             }).await??;
         }
-        Commands::Daemon => {
-            if let Err(e) = FileWatcher::watch(".").await {
+        Commands::Daemon { path } => {
+            if let Err(e) = FileWatcher::watch(&path).await {
                 eprintln!("Watcher error: {}", e);
             }
         }
