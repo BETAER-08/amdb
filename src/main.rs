@@ -32,7 +32,9 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command {
         Commands::Init => {
-            Indexer::scan_project(".")?;
+            tokio::task::spawn_blocking(|| {
+                Indexer::scan_project(".")
+            }).await??;
         }
         Commands::Daemon => {
             if let Err(e) = FileWatcher::watch(".").await {
