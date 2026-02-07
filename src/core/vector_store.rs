@@ -1,10 +1,10 @@
 use anyhow::Result;
 use serde::{Serialize, Deserialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, BinaryHeap};
 use std::fs;
 use std::path::Path;
 use std::io::{BufReader, BufWriter};
-use std::cmp::Ordering; // 추가됨
+use std::cmp::{Ordering, Reverse};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VectorRecord {
@@ -17,6 +17,30 @@ pub struct VectorRecord {
 #[derive(Serialize, Deserialize)]
 pub struct VectorStore {
     records: HashMap<String, VectorRecord>,
+}
+
+struct SearchCandidate<'a> {
+    score: f64,
+    record: &'a VectorRecord,
+}
+
+impl<'a> PartialEq for SearchCandidate<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        self.score == other.score
+    }
+}
+impl<'a> Eq for SearchCandidate<'a> {}
+
+impl<'a> PartialOrd for SearchCandidate<'a> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<'a> Ord for SearchCandidate<'a> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.score.partial_cmp(&other.score).unwrap_or(Ordering::Equal)
+    }
 }
 
 impl VectorStore {
@@ -70,18 +94,30 @@ impl VectorStore {
     }
 
     pub fn search(&self, query_vec: &[f32], limit: usize) -> Vec<(f64, VectorRecord)> {
-        let mut results: Vec<(f64, VectorRecord)> = self.records.values()
-            .map(|record| {
-                let score = cosine_similarity(query_vec, &record.vector);
-                (score, record.clone())
-            })
-            .collect();
+        let mut heap: BinaryHeap<Reverse<SearchCandidate>> = BinaryHeap::with_capacity(limit);
 
-        results.sort_by(|a, b| {
-            b.0.partial_cmp(&a.0).unwrap_or(Ordering::Equal)
-        });
+        for record in self.records.values() {
+            let score = cosine_similarity(query_vec, &record.vector);
 
-        results.into_iter().take(limit).collect()
+            if heap.len() < limit {
+                heap.push(Reverse(SearchCandidate { score, record }));
+            } else {
+                if let Some(Reverse(min_item)) = heap.peek() {
+                    if score > min_item.score {
+                        heap.pop();
+                        heap.push(Reverse(SearchCandidate { score, record }));
+                    }
+                }
+            }
+        }
+
+        let mut results = Vec::with_capacity(limit);
+        while let Some(Reverse(item)) = heap.pop() {
+            results.push((item.score, item.record.clone()));
+        }
+        results.reverse();
+
+        results
     }
 }
 
