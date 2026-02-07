@@ -7,3 +7,4 @@
 *.swp
 .amdb/
 .fastembed_cache/
+.database/

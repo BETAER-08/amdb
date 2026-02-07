@@ -36,29 +36,36 @@ impl Indexer {
 
             if path.is_file() {
                 if let Some(lang) = SupportedLanguage::from_path(path) {
-                    if let Ok(mut parser) = CodeParser::new(lang) {
-                        if let Ok(code) = fs::read_to_string(path) {
-                            let path_str = path.to_string_lossy().to_string();
+                    match CodeParser::new(lang) {
+                        Ok(mut parser) => {
+                            if let Ok(code) = fs::read_to_string(path) {
+                                let path_str = path.to_string_lossy().to_string();
 
-                            if let Ok((symbols, graph, _, warnings)) = parser.parse(&path_str, &code) {
-                                db.save_symbols(&path_str, &symbols)?;
-                                db.save_relationships(&path_str, &graph)?;
-                                db.save_warnings(&path_str, &warnings)?;
+                                match parser.parse(&path_str, &code) {
+                                    Ok((symbols, graph, _, warnings)) => {
+                                        println!("Indexed: {}", path_str);
+                                        db.save_symbols(&path_str, &symbols)?;
+                                        db.save_relationships(&path_str, &graph)?;
+                                        db.save_warnings(&path_str, &warnings)?;
 
-                                for symbol in symbols {
-                                    let text = format!(
-                                        "File: {}\nName: {}\nKind: {}\nDoc: {}",
-                                        path_str, symbol.name, symbol.kind,
-                                        symbol.docstring.clone().unwrap_or_default()
-                                    );
+                                        for symbol in symbols {
+                                            let text = format!(
+                                                "File: {}\nName: {}\nKind: {}\nDoc: {}",
+                                                path_str, symbol.name, symbol.kind,
+                                                symbol.docstring.clone().unwrap_or_default()
+                                            );
 
-                                    if let Ok(embedding) = embedder.embed(&text) {
-                                        let id = format!("{}::{}", path_str, symbol.name);
-                                        vector_store.add(path_str.clone(), id, text, embedding);
-                                    }
+                                            if let Ok(embedding) = embedder.embed(&text) {
+                                                let id = format!("{}::{}", path_str, symbol.name);
+                                                vector_store.add(path_str.clone(), id, text, embedding);
+                                            }
+                                        }
+                                    },
+                                    Err(e) => println!("Parse Error [{}]: {:?}", path_str, e),
                                 }
                             }
-                        }
+                        },
+                        Err(e) => println!("Parser Init Error [{}]: {:?}", path.display(), e),
                     }
                 }
             }
@@ -127,8 +134,9 @@ impl Indexer {
         Ok(())
     }
 
-    fn is_ignored(entry: &walkdir::DirEntry) -> bool {
+fn is_ignored(entry: &walkdir::DirEntry) -> bool {
         let name = entry.file_name().to_string_lossy();
+        if name == "." { return false; }
         name.starts_with('.') ||
             name == "target" ||
             name == "node_modules" ||

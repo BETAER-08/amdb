@@ -33,12 +33,14 @@ impl ContextGenerator {
             
             println!("{}", style(format!("Filtering context for: '{}'...", query)).cyan());
 
-            let vector_path = db_dir.join("vector");
+            let vector_path = db_dir.join("vector").join("vectors.bin");
+
             let store = VectorStore::load(&vector_path)?;
             let embedder = EmbeddingEngine::new()?;
-            
             let query_vec = embedder.embed(&query)?;
             let results = store.search(&query_vec, 10);
+
+            println!("DEBUG: Search found {} matches for query '{}'", results.len(), query);
 
             if results.is_empty() {
                 println!("{}", style("No matches found. Falling back to full context.").yellow());
@@ -46,13 +48,16 @@ impl ContextGenerator {
             } else {
                 let mut paths = Vec::new();
                 for (_, record) in results {
+                    println!("DEBUG: Found relevant file: {}", record.file_path);
+
                     if !paths.contains(&record.file_path) {
                         paths.push(record.file_path);
                     }
                 }
                 target_files = paths;
             }
-        } else {
+        }
+         else {
             output_filename = "context.md".to_string();
             println!("{}", style("Generating full project context...").blue());
             target_files = db.get_all_files()?;
