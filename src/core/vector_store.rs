@@ -30,21 +30,21 @@ impl VectorStore {
         if !file_path.exists() {
             return Ok(Self::new());
         }
-        
+
         let file = fs::File::open(file_path)?;
         let reader = BufReader::new(file);
         let store: VectorStore = bincode::deserialize_from(reader)?;
-        
+
         Ok(store)
     }
 
     pub fn save(&self, path: &Path) -> Result<()> {
         let file_path = path.join("vectors.bin");
-        
+
         let file = fs::File::create(file_path)?;
         let writer = BufWriter::new(file);
         bincode::serialize_into(writer, self)?;
-        
+
         Ok(())
     }
 
@@ -55,6 +55,18 @@ impl VectorStore {
             text,
             vector,
         });
+    }
+
+    // 추가됨: 특정 파일의 벡터 데이터 삭제
+    pub fn remove_by_file(&mut self, file_path: &str) {
+        let keys_to_remove: Vec<String> = self.records.iter()
+            .filter(|(_, record)| record.file_path == file_path)
+            .map(|(k, _)| k.clone())
+            .collect();
+
+        for key in keys_to_remove {
+            self.records.remove(&key);
+        }
     }
 
     pub fn search(&self, query_vec: &[f32], limit: usize) -> Vec<(f64, VectorRecord)> {

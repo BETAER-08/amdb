@@ -15,6 +15,7 @@ impl Indexer {
         let db_dir = Path::new(".database");
         let vector_path = db_dir.join("vector");
 
+        // 이전에 수정한 create_dir_all 적용 유지
         fs::create_dir_all(&vector_path)?;
 
         let mut db = ContextDb::open(db_dir)?;
@@ -66,6 +67,70 @@ impl Indexer {
 
         vector_store.save(&vector_path)?;
         println!("Project indexed successfully.");
+        Ok(())
+    }
+
+    // 추가됨: 단일 파일 업데이트
+    pub fn update_file(path: &str) -> Result<()> {
+        let db_dir = Path::new(".database");
+        let vector_path = db_dir.join("vector");
+
+        let mut db = ContextDb::open(db_dir)?;
+        let mut vector_store = VectorStore::load(&vector_path).unwrap_or_else(|_| VectorStore::new());
+        let embedder = EmbeddingEngine::new()?;
+
+        // 기존 데이터 삭제 (중복 방지)
+        vector_store.remove_by_file(path);
+
+        let path_obj = Path::new(path);
+        if path_obj.exists() {
+            if let Some(lang) = SupportedLanguage::from_path(path_obj) {
+                if let Ok(mut parser) = CodeParser::new(lang) {
+                    if let Ok(code) = fs::read_to_string(path_obj) {
+                        // 파싱
+                        if let Ok((symbols, graph, _, warnings)) = parser.parse(path, &code) {
+                            // DB 업데이트 (내부적으로 DELETE 후 INSERT 수행)
+                            db.save_symbols(path, &symbols)?;
+                            db.save_relationships(path, &graph)?;
+                            db.save_warnings(path, &warnings)?;
+
+                            // 벡터 스토어 업데이트
+                            for symbol in symbols {
+                                let text = format!(
+                                    "File: {}\nName: {}\nKind: {}\nDoc: {}",
+                                    path, symbol.name, symbol.kind,
+                                    symbol.docstring.clone().unwrap_or_default()
+                                );
+
+                                if let Ok(embedding) = embedder.embed(&text) {
+                                    let id = format!("{}::{}", path, symbol.name);
+                                    vector_store.add(path.to_string(), id, text, embedding);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        vector_store.save(&vector_path)?;
+        println!("Updated: {}", path);
+        Ok(())
+    }
+
+    // 추가됨: 단일 파일 삭제
+    pub fn remove_file(path: &str) -> Result<()> {
+        let db_dir = Path::new(".database");
+        let vector_path = db_dir.join("vector");
+
+        let mut db = ContextDb::open(db_dir)?;
+        let mut vector_store = VectorStore::load(&vector_path).unwrap_or_else(|_| VectorStore::new());
+
+        db.remove_file_data(path)?;
+        vector_store.remove_by_file(path);
+
+        vector_store.save(&vector_path)?;
+        println!("Removed: {}", path);
         Ok(())
     }
 

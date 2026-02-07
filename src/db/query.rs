@@ -1,7 +1,7 @@
 use rusqlite::{params, Connection, Result};
 use std::path::Path;
 use crate::core::parser::{CodeSymbol, CodeWarning};
-use crate::db::schema; 
+use crate::db::schema;
 
 pub struct Relationship {
     pub caller: String,
@@ -16,21 +16,21 @@ impl ContextDb {
     pub fn open(path: &Path) -> Result<Self> {
         let db_path = path.join("context.db");
         let conn = Connection::open(db_path)?;
-        
+
         schema::init(&conn)?;
-        
+
         Ok(Self { conn })
     }
 
     pub fn save_symbols(&mut self, file_path: &str, symbols: &[CodeSymbol]) -> Result<()> {
         let tx = self.conn.transaction()?;
         tx.execute("DELETE FROM symbols WHERE file_path = ?1", params![file_path])?;
-        
+
         {
             let mut stmt = tx.prepare(
                 "INSERT INTO symbols (file_path, name, kind, line, docstring) VALUES (?1, ?2, ?3, ?4, ?5)"
             )?;
-            
+
             for sym in symbols {
                 stmt.execute(params![file_path, sym.name, sym.kind, sym.line, sym.docstring])?;
             }
@@ -41,12 +41,12 @@ impl ContextDb {
     pub fn save_relationships(&mut self, file_path: &str, graph: &crate::core::graph::DependencyGraph) -> Result<()> {
         let tx = self.conn.transaction()?;
         tx.execute("DELETE FROM relationships WHERE file_path = ?1", params![file_path])?;
-        
+
         {
             let mut stmt = tx.prepare(
                 "INSERT INTO relationships (file_path, caller, callee) VALUES (?1, ?2, ?3)"
             )?;
-            
+
             for (caller, callees) in &graph.edges {
                 for callee in callees {
                     stmt.execute(params![file_path, caller, callee])?;
@@ -59,16 +59,25 @@ impl ContextDb {
     pub fn save_warnings(&mut self, file_path: &str, warnings: &[CodeWarning]) -> Result<()> {
         let tx = self.conn.transaction()?;
         tx.execute("DELETE FROM warnings WHERE file_path = ?1", params![file_path])?;
-        
+
         {
             let mut stmt = tx.prepare(
                 "INSERT INTO warnings (file_path, kind, message, line) VALUES (?1, ?2, ?3, ?4)"
             )?;
-            
+
             for w in warnings {
                 stmt.execute(params![file_path, w.kind, w.message, w.line])?;
             }
         }
+        tx.commit()
+    }
+
+    // 추가됨: 파일 관련 모든 데이터 삭제
+    pub fn remove_file_data(&mut self, file_path: &str) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        tx.execute("DELETE FROM symbols WHERE file_path = ?1", params![file_path])?;
+        tx.execute("DELETE FROM relationships WHERE file_path = ?1", params![file_path])?;
+        tx.execute("DELETE FROM warnings WHERE file_path = ?1", params![file_path])?;
         tx.commit()
     }
 
@@ -130,7 +139,7 @@ impl ContextDb {
     pub fn get_all_files(&self) -> Result<Vec<String>> {
         let mut stmt = self.conn.prepare("SELECT DISTINCT file_path FROM symbols ORDER BY file_path")?;
         let rows = stmt.query_map([], |row| row.get(0))?;
-        
+
         let mut files = Vec::new();
         for file in rows {
             files.push(file?);
@@ -146,7 +155,7 @@ impl ContextDb {
                 callee: row.get(1)?,
             })
         })?;
-        
+
         let mut edges = Vec::new();
         for edge in rows {
             edges.push(edge?);
