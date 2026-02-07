@@ -16,40 +16,29 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # 🐧 Linux (x86_64)
+          # 🐧 Linux (x64)
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             artifact_name: amdb
             asset_name: amdb-linux-amd64.tar.gz
-            use_cross: false
-
-          # 🐧 Linux (ARM64) - 🔥 추가됨!
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            artifact_name: amdb
-            asset_name: amdb-linux-aarch64.tar.gz
-            use_cross: true  # ARM 빌드를 위해 cross 사용
 
           # 🍎 macOS (Apple Silicon)
           - os: macos-latest
             target: aarch64-apple-darwin
             artifact_name: amdb
             asset_name: amdb-macos-aarch64.tar.gz
-            use_cross: false
 
           # 🍎 macOS (Intel)
           - os: macos-latest
             target: x86_64-apple-darwin
             artifact_name: amdb
             asset_name: amdb-macos-amd64.tar.gz
-            use_cross: false
 
-          # 🪟 Windows (x86_64)
+          # 🪟 Windows (x64)
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             artifact_name: amdb.exe
             asset_name: amdb-windows-amd64.zip
-            use_cross: false
 
     steps:
       # 1. Windows 긴 경로 설정
@@ -73,22 +62,12 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      # 4. 🔥 Cross 툴 설치 (ARM 빌드용)
-      - name: Install Cross
-        if: matrix.use_cross
-        run: cargo install cross
-
-      # 5. 빌드 (use_cross 여부에 따라 명령어 분기)
+      # 4. 빌드 (Cross 제거 -> 기본 Cargo Build 사용)
       - name: Build
         shell: bash
-        run: |
-          if [ "${{ matrix.use_cross }}" == "true" ]; then
-            cross build --verbose --release --target ${{ matrix.target }}
-          else
-            cargo build --verbose --release --target ${{ matrix.target }}
-          fi
+        run: cargo build --verbose --release --target ${{ matrix.target }}
 
-      # 6. Linux/macOS 패키징
+      # 5. Linux/macOS 패키징
       - name: Package (Linux/macOS)
         if: matrix.os != 'windows-latest'
         shell: bash
@@ -102,7 +81,7 @@ jobs:
           fi
           cd ../../..
 
-      # 7. Windows 패키징
+      # 6. Windows 패키징
       - name: Package (Windows)
         if: matrix.os == 'windows-latest'
         shell: bash
