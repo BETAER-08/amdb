@@ -1,7 +1,7 @@
 # amdb: AI 컨텍스트 생성기
 
 ![Rust](https://img.shields.io/badge/built_with-Rust-dca282.svg)
-![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)
+![Version](https://img.shields.io/badge/version-0.3.1-blue.svg)
 
 ## ⚡ 컨텍스트 문제
 AI 코딩 어시스턴트(Cursor, Windsurf, Claude)는 강력하지만, **볼수 았는 정보가 한정적입니다**. 이들은 여러분이 열어놓은 파일만 볼 수 있습니다. 여러분의 전체 코드베이스에 대한 깊이 있는 구조적 이해가 부족합니다.

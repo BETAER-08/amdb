@@ -1,7 +1,7 @@
 # amdb: AI Context Generator
 
 ![Rust](https://img.shields.io/badge/built_with-Rust-dca282.svg)
-![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)
+![Version](https://img.shields.io/badge/version-0.3.1-blue.svg)
 
 ## [korean](readmekr.md)
 
