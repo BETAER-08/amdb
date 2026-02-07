@@ -15,7 +15,6 @@ impl Indexer {
         let db_dir = Path::new(".database");
         let vector_path = db_dir.join("vector");
 
-        // 이전에 수정한 create_dir_all 적용 유지
         fs::create_dir_all(&vector_path)?;
 
         let mut db = ContextDb::open(db_dir)?;
@@ -70,7 +69,6 @@ impl Indexer {
         Ok(())
     }
 
-    // 추가됨: 단일 파일 업데이트
     pub fn update_file(path: &str) -> Result<()> {
         let db_dir = Path::new(".database");
         let vector_path = db_dir.join("vector");
@@ -78,8 +76,6 @@ impl Indexer {
         let mut db = ContextDb::open(db_dir)?;
         let mut vector_store = VectorStore::load(&vector_path).unwrap_or_else(|_| VectorStore::new());
         let embedder = EmbeddingEngine::new()?;
-
-        // 기존 데이터 삭제 (중복 방지)
         vector_store.remove_by_file(path);
 
         let path_obj = Path::new(path);
@@ -118,7 +114,6 @@ impl Indexer {
         Ok(())
     }
 
-    // 추가됨: 단일 파일 삭제
     pub fn remove_file(path: &str) -> Result<()> {
         let db_dir = Path::new(".database");
         let vector_path = db_dir.join("vector");

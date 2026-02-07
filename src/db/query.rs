@@ -71,8 +71,7 @@ impl ContextDb {
         }
         tx.commit()
     }
-
-    // 추가됨: 파일 관련 모든 데이터 삭제
+    
     pub fn remove_file_data(&mut self, file_path: &str) -> Result<()> {
         let tx = self.conn.transaction()?;
         tx.execute("DELETE FROM symbols WHERE file_path = ?1", params![file_path])?;
