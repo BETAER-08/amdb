@@ -55,3 +55,8 @@ opt-level = 3
 [profile.dist]
 inherits = "release"
 lto = "thin"
+
+[dev-dependencies]
+assert_cmd = "2.0"
+predicates = "3.0"
+tempfile = "3.8"
