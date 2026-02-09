@@ -69,6 +69,7 @@ dependencies = [
  "lazy_static",
  "notify",
  "ordered-float",
+ "rayon",
  "regex",
  "rusqlite",
  "serde",
