@@ -2,6 +2,7 @@ use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher, EventKind};
 use notify::event::{ModifyKind, RenameMode};
 use std::path::Path;
 use std::sync::mpsc::channel;
+use tracing::{info, debug, error};
 use crate::core::indexer::Indexer;
 use crate::core::languages::SupportedLanguage;
 
@@ -14,7 +15,7 @@ impl FileWatcher {
 
         watcher.watch(Path::new(root), RecursiveMode::Recursive)?;
 
-        println!("Watcher started on: {}", root);
+        info!("Watcher started on: {}", root);
 
         for res in rx {
             match res {
@@ -26,17 +27,17 @@ impl FileWatcher {
                             let old_path = event.paths[0].to_string_lossy();
                             let new_path = event.paths[1].to_string_lossy();
 
-                            println!("Rename detected: {} -> {}", old_path, new_path);
+                            debug!("Rename detected: {} -> {}", old_path, new_path);
 
                             if !old_path.contains(".database") && !old_path.contains(".amdb") {
                                 if let Err(e) = Indexer::remove_file(root, &old_path) {
-                                    eprintln!("Remove error: {}", e);
+                                    error!("Remove error: {}", e);
                                 }
                             }
 
                             if !new_path.contains(".database") && !new_path.contains(".amdb") {
                                 if let Err(e) = Indexer::update_file(root, &new_path) {
-                                    eprintln!("Update error: {}", e);
+                                    error!("Update error: {}", e);
                                 }
                             }
                             continue;
@@ -55,15 +56,15 @@ impl FileWatcher {
                         if is_supported {
                             match kind {
                                 EventKind::Create(_) | EventKind::Modify(_) => {
-                                    println!("Detected change in: {}", path_str);
+                                    debug!("Detected change in: {}", path_str);
                                     if let Err(e) = Indexer::update_file(root, &path_str) {
-                                        eprintln!("Indexing error: {}", e);
+                                        error!("Indexing error: {}", e);
                                     }
                                 },
                                 EventKind::Remove(_) => {
-                                    println!("Detected removal of: {}", path_str);
+                                    debug!("Detected removal of: {}", path_str);
                                     if let Err(e) = Indexer::remove_file(root, &path_str) {
-                                        eprintln!("Removal error: {}", e);
+                                        error!("Removal error: {}", e);
                                     }
                                 },
                                 _ => {}
@@ -71,7 +72,7 @@ impl FileWatcher {
                         }
                     }
                 },
-                Err(e) => println!("Watch error: {:?}", e),
+                Err(e) => error!("Watch error: {:?}", e),
             }
         }
         Ok(())

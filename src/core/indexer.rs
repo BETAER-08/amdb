@@ -4,6 +4,7 @@ use std::path::Path;
 use std::sync::Arc;
 use rayon::prelude::*;
 use ignore::WalkBuilder;
+use tracing::{info, debug, warn, error};
 use crate::core::parser::{CodeParser, CodeSymbol, CodeWarning};
 use crate::core::vector_store::VectorStore;
 use crate::core::embedding::EmbeddingEngine;
@@ -33,14 +34,14 @@ impl Indexer {
 
         let embedder = Arc::new(EmbeddingEngine::new()?);
 
-        println!("🔍 Scanning files in {}...", root);
+        info!("Scanning files in {}...", root);
 
         let walker = WalkBuilder::new(root).build();
         let entries: Vec<_> = walker.filter_map(|e| e.ok())
             .filter(|e| e.file_type().map(|ft| ft.is_file()).unwrap_or(false))
             .collect();
 
-        println!("🚀 Indexing {} files using {} threads...", entries.len(), rayon::current_num_threads());
+        info!("Indexing {} files using {} threads...", entries.len(), rayon::current_num_threads());
 
         let results: Vec<FileIndexData> = entries.par_iter()
             .filter_map(|entry| {
@@ -67,6 +68,8 @@ impl Indexer {
                             }
                         }
 
+                        debug!("Parsed: {}", path_str);
+
                         Some(FileIndexData {
                             path: path_str,
                             symbols,
@@ -75,7 +78,10 @@ impl Indexer {
                             vectors,
                         })
                     },
-                    Err(_) => None,
+                    Err(e) => {
+                        warn!("Failed to parse {}: {}", path_str, e);
+                        None
+                    },
                 }
             })
             .collect();
@@ -89,22 +95,24 @@ impl Indexer {
 
             if !data.warnings.is_empty() {
                 for warning in &data.warnings {
-                    eprintln!(
-                        "⚠️  [SECURITY] found in {}:{}: {}",
+                    warn!(
+                        "SECURITY warning in {}:{}: {}",
                         data.path, warning.line, warning.message
                     );
                 }
             }
 
             for (id, text, vector) in data.vectors {
-                vector_store.add(data.path.clone(), id, text, vector)?;
+                if let Err(e) = vector_store.add(data.path.clone(), id, text, vector) {
+                    error!("Failed to add vector for {}: {}", data.path, e);
+                }
             }
         }
 
         vector_store.commit()?;
         vector_store.save(&vector_path)?;
 
-        println!("✅ Project indexed successfully at {}", root);
+        info!("Project indexed successfully at {}", root);
         Ok(())
     }
 
@@ -123,31 +131,41 @@ impl Indexer {
             if let Some(lang) = SupportedLanguage::from_path(path_obj) {
                 if let Ok(mut parser) = CodeParser::new(lang) {
                     if let Ok(code) = fs::read_to_string(path_obj) {
-                        if let Ok((symbols, graph, _, warnings)) = parser.parse(path, &code) {
-                            db.save_symbols(path, &symbols)?;
-                            db.save_relationships(path, &graph)?;
-                            db.save_warnings(path, &warnings)?;
+                        match parser.parse(path, &code) {
+                            Ok((symbols, graph, _, warnings)) => {
+                                db.save_symbols(path, &symbols)?;
+                                db.save_relationships(path, &graph)?;
+                                db.save_warnings(path, &warnings)?;
 
-                            for symbol in symbols {
-                                let text = format!(
-                                    "File: {}\nName: {}\nKind: {}\nDoc: {}",
-                                    path, symbol.name, symbol.kind,
-                                    symbol.docstring.clone().unwrap_or_default()
-                                );
+                                for symbol in symbols {
+                                    let text = format!(
+                                        "File: {}\nName: {}\nKind: {}\nDoc: {}",
+                                        path, symbol.name, symbol.kind,
+                                        symbol.docstring.clone().unwrap_or_default()
+                                    );
 
-                                if let Ok(embedding) = embedder.embed(&text) {
-                                    let id = format!("{}::{}", path, symbol.name);
-                                    vector_store.add(path.to_string(), id, text, embedding)?;
+                                    if let Ok(embedding) = embedder.embed(&text) {
+                                        let id = format!("{}::{}", path, symbol.name);
+                                        vector_store.add(path.to_string(), id, text, embedding)?;
+                                    }
                                 }
+                                debug!("Successfully updated index for: {}", path);
                             }
+                            Err(e) => warn!("Failed to parse update for {}: {}", path, e),
                         }
+                    } else {
+                        warn!("Failed to read file: {}", path);
                     }
                 }
+            } else {
+                debug!("Skipping update for unsupported language: {}", path);
             }
+        } else {
+            debug!("File does not exist, skipped update: {}", path);
         }
 
         vector_store.save(&vector_path)?;
-        println!("Updated: {}", path);
+        info!("Updated index for: {}", path);
         Ok(())
     }
 
@@ -162,7 +180,7 @@ impl Indexer {
         vector_store.remove_by_file(path)?;
 
         vector_store.save(&vector_path)?;
-        println!("Removed: {}", path);
+        info!("Removed index for: {}", path);
         Ok(())
     }
 }

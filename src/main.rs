@@ -1,4 +1,6 @@
 use clap::{Parser, Subcommand};
+use tracing::{info, error, Level};
+use tracing_subscriber::FmtSubscriber;
 
 mod core;
 mod daemon;
@@ -14,6 +16,9 @@ use crate::core::generator::ContextGenerator;
 struct Cli {
     #[command(subcommand)]
     command: Commands,
+
+    #[arg(short, long, global = true)]
+    verbose: bool,
 }
 
 #[derive(Subcommand)]
@@ -34,24 +39,39 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt::init();
-
     let cli = Cli::parse();
+
+    let log_level = if cli.verbose { Level::DEBUG } else { Level::INFO };
+
+    let subscriber = FmtSubscriber::builder()
+        .with_max_level(log_level)
+        .with_target(false)
+        .without_time()
+        .finish();
+
+    tracing::subscriber::set_global_default(subscriber)
+        .expect("setting default subscriber failed");
 
     match cli.command {
         Commands::Init { path } => {
-            tokio::task::spawn_blocking(move || {
+            info!("Initializing amdb in: {}", path);
+            let res = tokio::task::spawn_blocking(move || {
                 Indexer::scan_project(&path)
-            }).await??;
+            }).await?;
+
+            if let Err(e) = res {
+                error!("Init failed: {}", e);
+            }
         }
         Commands::Daemon { path } => {
+            info!("Starting daemon watcher on: {}", path);
             if let Err(e) = FileWatcher::watch(&path).await {
-                eprintln!("Watcher error: {}", e);
+                error!("Watcher error: {}", e);
             }
         }
         Commands::Generate { focus } => {
             if let Err(e) = ContextGenerator::generate(focus).await {
-                eprintln!("Error: {}", e);
+                error!("Generation error: {}", e);
             }
         }
     }
