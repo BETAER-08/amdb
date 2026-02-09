@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::fs;
 use std::path::Path;
-use walkdir::WalkDir;
+use ignore::WalkBuilder; // WalkDir 대신 ignore::WalkBuilder 사용
 use crate::core::parser::CodeParser;
 use crate::core::vector_store::VectorStore;
 use crate::core::embedding::EmbeddingEngine;
@@ -26,47 +26,52 @@ impl Indexer {
                 vector_store = store;
             }
         }
+        let walker = WalkBuilder::new(root).build();
 
-        for entry in WalkDir::new(root)
-            .into_iter()
-            .filter_entry(|e| !Indexer::is_ignored(e))
-        {
-            let entry = entry?;
-            let path = entry.path();
+        for result in walker {
+            match result {
+                Ok(entry) => {
+                    let path = entry.path();
+                    let is_file = entry.file_type().map_or(false, |ft| ft.is_file());
 
-            if path.is_file() {
-                if let Some(lang) = SupportedLanguage::from_path(path) {
-                    match CodeParser::new(lang) {
-                        Ok(mut parser) => {
-                            if let Ok(code) = fs::read_to_string(path) {
-                                let path_str = path.to_string_lossy().to_string();
+                    if is_file {
+                        if let Some(lang) = SupportedLanguage::from_path(path) {
+                            match CodeParser::new(lang) {
+                                Ok(mut parser) => {
+                                    if let Ok(code) = fs::read_to_string(path) {
+                                        let path_str = path.to_string_lossy().to_string();
 
-                                match parser.parse(&path_str, &code) {
-                                    Ok((symbols, graph, _, warnings)) => {
-                                        println!("Indexed: {}", path_str);
-                                        db.save_symbols(&path_str, &symbols)?;
-                                        db.save_relationships(&path_str, &graph)?;
-                                        db.save_warnings(&path_str, &warnings)?;
+                                        match parser.parse(&path_str, &code) {
+                                            Ok((symbols, graph, _, warnings)) => {
+                                                println!("Indexed: {}", path_str);
+                                                db.save_symbols(&path_str, &symbols)?;
+                                                db.save_relationships(&path_str, &graph)?;
+                                                db.save_warnings(&path_str, &warnings)?;
 
-                                        for symbol in symbols {
-                                            let text = format!(
-                                                "File: {}\nName: {}\nKind: {}\nDoc: {}",
-                                                path_str, symbol.name, symbol.kind,
-                                                symbol.docstring.clone().unwrap_or_default()
-                                            );
+                                                for symbol in symbols {
+                                                    let text = format!(
+                                                        "File: {}\nName: {}\nKind: {}\nDoc: {}",
+                                                        path_str, symbol.name, symbol.kind,
+                                                        symbol.docstring.clone().unwrap_or_default()
+                                                    );
 
-                                            if let Ok(embedding) = embedder.embed(&text) {
-                                                let id = format!("{}::{}", path_str, symbol.name);
-                                                vector_store.add(path_str.clone(), id, text, embedding);
-                                            }
+                                                    if let Ok(embedding) = embedder.embed(&text) {
+                                                        let id = format!("{}::{}", path_str, symbol.name);
+                                                        vector_store.add(path_str.clone(), id, text, embedding);
+                                                    }
+                                                }
+                                            },
+                                            Err(e) => println!("Parse Error [{}]: {:?}", path_str, e),
                                         }
-                                    },
-                                    Err(e) => println!("Parse Error [{}]: {:?}", path_str, e),
-                                }
+                                    }
+                                },
+                                Err(e) => println!("Parser Init Error [{}]: {:?}", path.display(), e),
                             }
-                        },
-                        Err(e) => println!("Parser Init Error [{}]: {:?}", path.display(), e),
+                        }
                     }
+                },
+                Err(err) => {
+                    eprintln!("Skipping entry due to error: {}", err);
                 }
             }
         }
@@ -87,6 +92,7 @@ impl Indexer {
         vector_store.remove_by_file(path);
 
         let path_obj = Path::new(path);
+
         if path_obj.exists() {
             if let Some(lang) = SupportedLanguage::from_path(path_obj) {
                 if let Ok(mut parser) = CodeParser::new(lang) {
@@ -132,15 +138,5 @@ impl Indexer {
         vector_store.save(&vector_path)?;
         println!("Removed: {}", path);
         Ok(())
-    }
-
-fn is_ignored(entry: &walkdir::DirEntry) -> bool {
-        let name = entry.file_name().to_string_lossy();
-        if name == "." { return false; }
-        name.starts_with('.') ||
-            name == "target" ||
-            name == "node_modules" ||
-            name == ".database" ||
-            name == ".amdb"
     }
 }
