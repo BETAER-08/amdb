@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
-use rayon::prelude::*; // Rayon 병렬 반복자
+use rayon::prelude::*;
 use ignore::WalkBuilder;
 use crate::core::parser::{CodeParser, CodeSymbol, CodeWarning};
 use crate::core::vector_store::VectorStore;
@@ -18,7 +18,7 @@ struct FileIndexData {
     symbols: Vec<CodeSymbol>,
     graph: DependencyGraph,
     warnings: Vec<CodeWarning>,
-    vectors: Vec<(String, String, Vec<f32>)>, // (id, text, embedding)
+    vectors: Vec<(String, String, Vec<f32>)>,
 }
 
 impl Indexer {
@@ -86,11 +86,19 @@ impl Indexer {
             })
             .collect();
 
-
         for data in results {
             db.save_symbols(&data.path, &data.symbols)?;
             db.save_relationships(&data.path, &data.graph)?;
             db.save_warnings(&data.path, &data.warnings)?;
+
+            if !data.warnings.is_empty() {
+                for warning in &data.warnings {
+                    eprintln!(
+                        "⚠️  [SECURITY] found in {}:{}: {}",
+                        data.path, warning.line, warning.message
+                    );
+                }
+            }
 
             for (id, text, vector) in data.vectors {
                 vector_store.add(data.path.clone(), id, text, vector);
@@ -101,6 +109,7 @@ impl Indexer {
         println!("✅ Project indexed successfully at {}", root);
         Ok(())
     }
+
     pub fn update_file(root: &str, path: &str) -> Result<()> {
         let db_dir = Path::new(root).join(".database");
         let vector_path = db_dir.join("vector");

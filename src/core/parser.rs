@@ -57,21 +57,33 @@ impl CodeParser {
     pub fn parse(&mut self, file_path: &str, code: &str) -> Result<(Vec<CodeSymbol>, DependencyGraph, Vec<CodeRoute>, Vec<CodeWarning>)> {
         let tree = self.parser.parse(code, None)
             .ok_or_else(|| anyhow::anyhow!("Parsing failed"))?;
-        
+
         let ts_lang = self.language.get_language();
         let query_str = self.language.get_query();
         let query = Query::new(&ts_lang, query_str)?;
-        
+
         let mut cursor = QueryCursor::new();
         let mut symbols = Vec::new();
         let mut routes = Vec::new();
         let mut graph = DependencyGraph::new();
-        let mut warnings = Vec::new(); 
+        let mut warnings = Vec::new();
 
         for (name, re) in SECRET_PATTERNS.iter() {
             for cap in re.captures_iter(code) {
                 if let Some(m) = cap.get(0) {
-                    let line = code[..m.start()].lines().count() + 1; 
+                    let start_byte = m.start();
+                    let end_byte = m.end();
+
+                    if let Some(node) = tree.root_node().descendant_for_byte_range(start_byte, end_byte) {
+                        let kind = node.kind();
+
+                        if kind.contains("comment") {
+                            continue;
+                        }
+
+                    }
+
+                    let line = code[..start_byte].lines().count() + 1;
                     warnings.push(CodeWarning {
                         kind: "Secret Leak".to_string(),
                         message: format!("Hardcoded {} detected. Risk level: CRITICAL.", name),
@@ -115,7 +127,7 @@ impl CodeParser {
 
             if !name.is_empty() && !kind.is_empty() {
                 symbols.push(CodeSymbol {
-                    kind, name, line: m.pattern_index, 
+                    kind, name, line: m.pattern_index,
                     docstring, signature, is_public
                 });
             }
@@ -126,7 +138,7 @@ impl CodeParser {
                 });
             }
         }
-        
+
         Ok((symbols, graph, routes, warnings))
     }
 
@@ -136,7 +148,7 @@ impl CodeParser {
             let kind = n.kind();
             if kind.contains("function") || kind.contains("method") {
                 if let Some(name_node) = n.child_by_field_name("name") {
-                     return name_node.utf8_text(code.as_bytes()).ok().map(|s| s.to_string());
+                    return name_node.utf8_text(code.as_bytes()).ok().map(|s| s.to_string());
                 }
             }
             curr = n.parent();
