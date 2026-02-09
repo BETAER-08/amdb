@@ -1,10 +1,9 @@
 use anyhow::Result;
-use serde::{Serialize, Deserialize};
-use std::collections::{HashMap, BinaryHeap};
-use std::fs;
+use rusqlite::{params, Connection};
 use std::path::Path;
-use std::io::{BufReader, BufWriter};
 use std::cmp::{Ordering, Reverse};
+use std::collections::BinaryHeap;
+use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VectorRecord {
@@ -14,110 +13,122 @@ pub struct VectorRecord {
     pub vector: Vec<f32>,
 }
 
-#[derive(Serialize, Deserialize)]
 pub struct VectorStore {
-    records: HashMap<String, VectorRecord>,
+    conn: Connection,
 }
 
-struct SearchCandidate<'a> {
+struct SearchCandidate {
     score: f64,
-    record: &'a VectorRecord,
+    record: VectorRecord,
 }
 
-impl<'a> PartialEq for SearchCandidate<'a> {
+impl PartialEq for SearchCandidate {
     fn eq(&self, other: &Self) -> bool {
         self.score == other.score
     }
 }
-impl<'a> Eq for SearchCandidate<'a> {}
+impl Eq for SearchCandidate {}
 
-impl<'a> PartialOrd for SearchCandidate<'a> {
+impl PartialOrd for SearchCandidate {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<'a> Ord for SearchCandidate<'a> {
+impl Ord for SearchCandidate {
     fn cmp(&self, other: &Self) -> Ordering {
         self.score.partial_cmp(&other.score).unwrap_or(Ordering::Equal)
     }
 }
 
 impl VectorStore {
-    pub fn new() -> Self {
-        Self {
-            records: HashMap::new(),
-        }
+    pub fn open(path: &Path) -> Result<Self> {
+        let db_path = path.join("vectors.db");
+        let conn = Connection::open(&db_path)?;
+
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS vectors (
+                id TEXT PRIMARY KEY,
+                file_path TEXT NOT NULL,
+                text TEXT NOT NULL,
+                vector BLOB NOT NULL
+            )",
+            [],
+        )?;
+        conn.execute_batch(
+            "PRAGMA journal_mode = WAL;
+             PRAGMA synchronous = NORMAL;",
+        )?;
+
+        Ok(Self { conn })
     }
 
-    pub fn load(path: &Path) -> Result<Self> {
-        let file_path = path.join("vectors.bin");
-        if !file_path.exists() {
-            return Ok(Self::new());
-        }
-
-        let file = fs::File::open(file_path)?;
-        let reader = BufReader::new(file);
-        let store: VectorStore = bincode::deserialize_from(reader)?;
-
-        Ok(store)
-    }
-
-    pub fn save(&self, path: &Path) -> Result<()> {
-        let file_path = path.join("vectors.bin");
-
-        let file = fs::File::create(file_path)?;
-        let writer = BufWriter::new(file);
-        bincode::serialize_into(writer, self)?;
-
+    pub fn begin_transaction(&mut self) -> Result<()> {
+        self.conn.execute("BEGIN TRANSACTION;", [])?;
         Ok(())
     }
 
-    pub fn add(&mut self, id: String, file_path: String, text: String, vector: Vec<f32>) {
-        self.records.insert(id.clone(), VectorRecord {
-            id,
-            file_path,
-            text,
-            vector,
-        });
+    pub fn commit(&mut self) -> Result<()> {
+        self.conn.execute("COMMIT;", [])?;
+        Ok(())
     }
 
-    pub fn remove_by_file(&mut self, file_path: &str) {
-        let keys_to_remove: Vec<String> = self.records.iter()
-            .filter(|(_, record)| record.file_path == file_path)
-            .map(|(k, _)| k.clone())
-            .collect();
+    pub fn add(&mut self, file_path: String, id: String, text: String, vector: Vec<f32>) -> Result<()> {
+        let vector_blob = bincode::serialize(&vector)?;
 
-        for key in keys_to_remove {
-            self.records.remove(&key);
-        }
+        self.conn.execute(
+            "INSERT OR REPLACE INTO vectors (id, file_path, text, vector) VALUES (?1, ?2, ?3, ?4)",
+            params![id, file_path, text, vector_blob],
+        )?;
+        Ok(())
     }
 
-    pub fn search(&self, query_vec: &[f32], limit: usize) -> Vec<(f64, VectorRecord)> {
+    pub fn remove_by_file(&mut self, file_path: &str) -> Result<()> {
+        self.conn.execute(
+            "DELETE FROM vectors WHERE file_path = ?1",
+            params![file_path],
+        )?;
+        Ok(())
+    }
+
+    pub fn search(&self, query_vec: &[f32], limit: usize) -> Result<Vec<(f64, VectorRecord)>> {
+        let mut stmt = self.conn.prepare("SELECT id, file_path, text, vector FROM vectors")?;
+
+        let mut rows = stmt.query([])?;
         let mut heap: BinaryHeap<Reverse<SearchCandidate>> = BinaryHeap::with_capacity(limit);
 
-        for record in self.records.values() {
-            let score = cosine_similarity(query_vec, &record.vector);
+        while let Some(row) = rows.next()? {
+            let id: String = row.get(0)?;
+            let file_path: String = row.get(1)?;
+            let text: String = row.get(2)?;
+            let vector_blob: Vec<u8> = row.get(3)?;
+            let vector: Vec<f32> = bincode::deserialize(&vector_blob)?;
+
+            let score = cosine_similarity(query_vec, &vector);
+
+            let record = VectorRecord { id, file_path, text, vector };
 
             if heap.len() < limit {
                 heap.push(Reverse(SearchCandidate { score, record }));
-            } else {
-                if let Some(Reverse(min_item)) = heap.peek() {
-                    if score > min_item.score {
-                        heap.pop();
-                        heap.push(Reverse(SearchCandidate { score, record }));
-                    }
+            } else if let Some(Reverse(min_item)) = heap.peek() {
+                if score > min_item.score {
+                    heap.pop();
+                    heap.push(Reverse(SearchCandidate { score, record }));
                 }
             }
         }
 
         let mut results = Vec::with_capacity(limit);
         while let Some(Reverse(item)) = heap.pop() {
-            results.push((item.score, item.record.clone()));
+            results.push((item.score, item.record));
         }
         results.reverse();
 
-        results
+        Ok(results)
+    }
+
+    pub fn save(&self, _path: &Path) -> Result<()> {
+        Ok(())
     }
 }
 

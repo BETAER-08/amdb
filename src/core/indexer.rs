@@ -29,15 +29,9 @@ impl Indexer {
         fs::create_dir_all(&vector_path)?;
 
         let mut db = ContextDb::open(&db_dir)?;
-        let mut vector_store = VectorStore::new();
+        let mut vector_store = VectorStore::open(&vector_path)?;
 
         let embedder = Arc::new(EmbeddingEngine::new()?);
-
-        if vector_path.exists() {
-            if let Ok(store) = VectorStore::load(&vector_path) {
-                vector_store = store;
-            }
-        }
 
         println!("🔍 Scanning files in {}...", root);
 
@@ -86,6 +80,8 @@ impl Indexer {
             })
             .collect();
 
+        vector_store.begin_transaction()?;
+
         for data in results {
             db.save_symbols(&data.path, &data.symbols)?;
             db.save_relationships(&data.path, &data.graph)?;
@@ -101,11 +97,13 @@ impl Indexer {
             }
 
             for (id, text, vector) in data.vectors {
-                vector_store.add(data.path.clone(), id, text, vector);
+                vector_store.add(data.path.clone(), id, text, vector)?;
             }
         }
 
+        vector_store.commit()?;
         vector_store.save(&vector_path)?;
+
         println!("✅ Project indexed successfully at {}", root);
         Ok(())
     }
@@ -115,10 +113,10 @@ impl Indexer {
         let vector_path = db_dir.join("vector");
 
         let mut db = ContextDb::open(&db_dir)?;
-        let mut vector_store = VectorStore::load(&vector_path).unwrap_or_else(|_| VectorStore::new());
+        let mut vector_store = VectorStore::open(&vector_path)?;
         let embedder = EmbeddingEngine::new()?;
 
-        vector_store.remove_by_file(path);
+        vector_store.remove_by_file(path)?;
 
         let path_obj = Path::new(path);
         if path_obj.exists() {
@@ -139,7 +137,7 @@ impl Indexer {
 
                                 if let Ok(embedding) = embedder.embed(&text) {
                                     let id = format!("{}::{}", path, symbol.name);
-                                    vector_store.add(path.to_string(), id, text, embedding);
+                                    vector_store.add(path.to_string(), id, text, embedding)?;
                                 }
                             }
                         }
@@ -158,10 +156,10 @@ impl Indexer {
         let vector_path = db_dir.join("vector");
 
         let mut db = ContextDb::open(&db_dir)?;
-        let mut vector_store = VectorStore::load(&vector_path).unwrap_or_else(|_| VectorStore::new());
+        let mut vector_store = VectorStore::open(&vector_path)?;
 
         db.remove_file_data(path)?;
-        vector_store.remove_by_file(path);
+        vector_store.remove_by_file(path)?;
 
         vector_store.save(&vector_path)?;
         println!("Removed: {}", path);
