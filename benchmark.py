@@ -1,16 +1,3 @@
-
-"""
-AMDB Official Benchmark Suite
------------------------------
-This script measures the efficiency of AMDB in three key areas:
-1. Retrieval Accuracy: Does it find the correct file?
-2. Global Reduction: How much token space is saved compared to the full repo?
-3. Noise Reduction: How well does it strip implementation details from complex files?
-
-Requirements:
-    pip install tiktoken
-"""
-
 import subprocess
 import os
 import sys
@@ -25,9 +12,7 @@ except ImportError:
     print("👉 Run: pip install tiktoken")
     sys.exit(1)
 
-# Use GPT-4 tokenizer for accurate measurement
 ENCODER = tiktoken.get_encoding("cl100k_base")
-
 
 def run_command(cmd, capture=True):
     try:
@@ -36,13 +21,10 @@ def run_command(cmd, capture=True):
     except Exception as e:
         return None
 
-
 def count_tokens(text):
     return len(ENCODER.encode(text))
 
-
 def scan_project_files(root_dir="src"):
-    """Scans all Rust files to establish a baseline."""
     file_list = []
     total_tokens = 0
 
@@ -50,7 +32,6 @@ def scan_project_files(root_dir="src"):
         for file in files:
             if file.endswith(".rs"):
                 full_path = os.path.join(root, file)
-                # Generate query from filename (e.g., vector_store.rs -> "vector store")
                 query_name = file.replace(".rs", "").replace("_", " ")
 
                 with open(full_path, "r", encoding="utf-8") as f:
@@ -66,9 +47,7 @@ def scan_project_files(root_dir="src"):
 
     return file_list, total_tokens
 
-
 def extract_interface_section(md_path, target_file_path):
-    """Extracts only the interface summary of the target file from the generated markdown."""
     if not os.path.exists(md_path): return ""
     with open(md_path, "r", encoding="utf-8") as f:
         content = f.read()
@@ -76,7 +55,6 @@ def extract_interface_section(md_path, target_file_path):
     filename = os.path.basename(target_file_path)
     escaped_name = re.escape(filename)
 
-    # Regex to capture content between "### ...filename" and the next header
     pattern = re.compile(f"### .*{escaped_name}(.*?)(?=\n#|\\Z)", re.DOTALL)
 
     match = pattern.search(content)
@@ -84,21 +62,18 @@ def extract_interface_section(md_path, target_file_path):
         return match.group(1).strip()
     return ""
 
-
 def run_benchmark():
     print(f"\n🚀 Starting AMDB Official Benchmark Suite")
     print(f"   Target: {os.getcwd()}")
     print("-" * 60)
 
-    # [Step 1] Initialize DB
-    if not os.path.exists("../.database"):
+    if not os.path.exists(".database"):
         print("⚙️ Initializing AMDB database...", end=" ")
         run_command(["amdb", "init"])
         print("Done.")
 
-    # [Step 2] Baseline Measurement
     print("📊 Measuring Codebase Baseline...", end=" ")
-    file_list, total_project_tokens = scan_project_files("../src")
+    file_list, total_project_tokens = scan_project_files("src")
     print(f"Done.")
     print(f"   - Files Scanned: {len(file_list)}")
     print(f"   - Total Raw Tokens: {total_project_tokens:,} (Full codebase size)")
@@ -117,15 +92,12 @@ def run_benchmark():
         raw_tokens = file_info["tokens"]
         target_path = file_info["path"]
 
-        # Clean output directory for accurate testing
-        if os.path.exists("../.amdb"):
+        if os.path.exists(".amdb"):
             for f in glob.glob(".amdb/*.md"):
                 os.remove(f)
 
-        # 1. Generate Context
         run_command(["amdb", "generate", "--focus", query])
 
-        # 2. Verify Output
         generated_files = glob.glob(".amdb/*.md")
         if not generated_files: continue
         md_path = generated_files[0]
@@ -133,21 +105,16 @@ def run_benchmark():
         with open(md_path, "r", encoding="utf-8") as f:
             full_md_content = f.read()
 
-        # 3. Measure Metrics
-        # A. Recall
         if os.path.basename(target_path) in full_md_content:
             results["retrieval_hits"] += 1
 
-        # B. Graph
         if "```mermaid" in full_md_content:
             results["graph_hits"] += 1
 
-        # C. Global Reduction (vs Full Repo)
         amdb_full_tokens = count_tokens(full_md_content)
         global_reduction = (1 - amdb_full_tokens / total_project_tokens) * 100
         results["global_reduction_sum"] += global_reduction
 
-        # D. Local Compression (Implementation vs Interface)
         pure_summary = extract_interface_section(md_path, target_path)
         amdb_pure_tokens = count_tokens(pure_summary) if pure_summary else 0
 
@@ -160,7 +127,6 @@ def run_benchmark():
                 "compression": compression
             })
 
-    # [Step 3] Top 5 Complex Files Analysis
     top_5_heavy = heapq.nlargest(5, results["file_stats"], key=lambda x: x["raw"])
 
     print("\n" + "=" * 95)
@@ -177,8 +143,12 @@ def run_benchmark():
             f"{match['name']:<25} | {match['raw']:<10} | {match['amdb']:<12} | {match['compression']:5.1f}%       | {winner}")
         total_heavy_comp += match["compression"]
 
-    # [Step 4] Final Report
     total_files = len(file_list)
+
+    if total_files == 0:
+        print("\n❌ Error: No source files found to benchmark.")
+        return
+
     success_rate = (results["retrieval_hits"] / total_files) * 100
     graph_rate = (results["graph_hits"] / total_files) * 100
     avg_global_reduction = results["global_reduction_sum"] / total_files
@@ -205,7 +175,6 @@ def run_benchmark():
     print(f"   - Verdict: Dependency graphs were generated for spatial reasoning.")
 
     print("\n✅ Benchmark Complete.")
-
 
 if __name__ == "__main__":
     run_benchmark()

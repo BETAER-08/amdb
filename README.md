@@ -10,7 +10,7 @@
 ## 📄 Related documents
 
 ### [korean](readmekr.md) 
-### [benchmark](benchmark/benchmark.md)
+### [benchmark](benchmark.md)
 
 ---
 
