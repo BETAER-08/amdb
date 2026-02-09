@@ -11,7 +11,7 @@
 
 ### [english](README.md) 
 ### [benchmark](benchmark.md)
-
+### [crates.io](https://crates.io/crates/amdb)
 ---
 
 ## ⚡ 컨텍스트 문제
