@@ -33,7 +33,7 @@ impl ContextGenerator {
             
             println!("{}", style(format!("Filtering context for: '{}'...", query)).cyan());
 
-            let vector_path = db_dir.join("vector").join("vectors.bin");
+            let vector_path = db_dir.join("vector");
 
             let store = VectorStore::load(&vector_path)?;
             let embedder = EmbeddingEngine::new()?;
