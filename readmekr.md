@@ -1,7 +1,18 @@
 # amdb: AI 컨텍스트 생성기
 
 ![Rust](https://img.shields.io/badge/built_with-Rust-dca282.svg)
-![Version](https://img.shields.io/badge/version-0.3.1-blue.svg)
+![Version](https://img.shields.io/badge/version-0.3.3-blue.svg)
+<p align="left">
+  <img src="amdb.png" alt="amdb logo" width="60">
+</p>
+
+---
+## 📄 관련 문서
+
+### [english](README.md) 
+### [benchmark](benchmark.md)
+
+---
 
 ## ⚡ 컨텍스트 문제
 AI 코딩 어시스턴트(Cursor, Windsurf, Claude)는 강력하지만, **볼수 았는 정보가 한정적입니다**. 이들은 여러분이 열어놓은 파일만 볼 수 있습니다. 여러분의 전체 코드베이스에 대한 깊이 있는 구조적 이해가 부족합니다.
@@ -69,6 +80,30 @@ amdb generate --focus "login authentication jwt"
 
 ---
 
+## 🔄 데몬 모드: 컨텍스트 자동 동기화
+
+AI 컨텍스트를 자동으로 최신 상태로 유지하고 싶으신가요? **데몬 모드**를 사용하여 프로젝트의 변경사항을 감시하세요. 파일을 편집, 이름 변경 또는 삭제하면 `amdb`가 백그라운드에서 즉시 데이터베이스를 업데이트합니다.
+
+```bash
+amdb daemon
+```
+
+디렉토리를 지정할 수도 있습니다:
+
+```bash
+amdb daemon ./my-project
+```
+
+데몬은 다음을 수행합니다:
+- ✅ 파일 변경사항 자동 감지 (생성, 수정, 삭제, 이름 변경)
+- ✅ 벡터 데이터베이스를 실시간으로 업데이트
+- ✅ 코드베이스와 컨텍스트를 동기화 유지
+- ✅ 백그라운드에서 조용히 실행
+
+**프로 팁:** 코딩하는 동안 별도의 터미널 창에서 데몬을 실행하세요. 수동으로 `amdb init`을 실행하지 않아도 AI 컨텍스트가 최신 상태로 유지됩니다.
+
+---
+
 ## 🛠 지원되는 언어
 
 `amdb`는 Tree-sitter 파서를 사용하여 다음의 구문과 구조를 완전히 이해합니다:
@@ -88,6 +123,45 @@ amdb generate --focus "login authentication jwt"
 - **CSS** (`.css`)
 - **JSON** (`.json`)
 - **Bash** (`.sh`, `.bash`)
+
+---
+
+## ⚙️ 설정
+
+### 사용자 정의 설정 (선택 사항)
+
+프로젝트 루트에 `amdb.toml` 파일을 생성하여 `amdb` 동작을 사용자 정의할 수 있습니다:
+
+```toml
+server_port = 3000
+
+exclude_patterns = [
+    "target",
+    ".git",
+    "node_modules",
+    ".amdb",
+    ".fastembed_cache",
+    "__pycache__",
+    "dist",
+    "build"
+]
+```
+
+**설정 옵션:**
+- `server_port`: 향후 서버 기능을 위한 포트 (기본값: 3000)
+- `exclude_patterns`: 스캔 중 무시할 디렉토리 및 패턴
+
+### 상세 모드
+
+디버깅을 위한 상세 로그가 필요하신가요? 모든 명령에 `--verbose` (또는 `-v`) 플래그를 추가하세요:
+
+```bash
+amdb init --verbose
+amdb generate --verbose
+amdb daemon --verbose
+```
+
+파일 스캔, 파싱 및 임베딩 생성에 대한 상세한 디버그 정보를 출력합니다.
 
 ---
 
