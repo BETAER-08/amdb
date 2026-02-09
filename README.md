@@ -1,7 +1,7 @@
 # amdb: AI Context Generator
 
 ![Rust](https://img.shields.io/badge/built_with-Rust-dca282.svg)
-![Version](https://img.shields.io/badge/version-0.3.1-blue.svg)
+![Version](https://img.shields.io/badge/version-0.3.2-blue.svg)
 <p align="left">
   <img src="amdb.png" alt="amdb logo" width="60">
 </p>
