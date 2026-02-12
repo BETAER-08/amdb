@@ -1,7 +1,7 @@
 # amdb: AI Context Generator
 
 ![Rust](https://img.shields.io/badge/built_with-Rust-dca282.svg)
-![Version](https://img.shields.io/badge/version-0.3.2-blue.svg)
+![Version](https://img.shields.io/badge/version-0.3.3-blue.svg)
 <p align="left">
   <img src="amdb.png" alt="amdb logo" width="60">
 </p>
@@ -11,7 +11,7 @@
 
 ### [korean](readmekr.md) 
 ### [benchmark](benchmark.md)
-
+### [crates.io](https://crates.io/crates/amdb)
 ---
 
 ## ⚡ The Context Problem
@@ -80,6 +80,30 @@ This creates a targeted summary (e.g., in `.amdb/`) containing only the symbols 
 
 ---
 
+## 🔄 Daemon Mode: Auto-Sync Your Context
+
+Want your AI context to stay fresh automatically? Use **Daemon Mode** to watch your project for changes. When you edit, rename, or delete files, `amdb` instantly updates the database in the background.
+
+```bash
+amdb daemon
+```
+
+Or specify a directory:
+
+```bash
+amdb daemon ./my-project
+```
+
+The daemon will:
+- ✅ Automatically detect file changes (create, modify, delete, rename)
+- ✅ Update the vector database in real-time
+- ✅ Keep your context synchronized with your codebase
+- ✅ Run silently in the background
+
+**Pro Tip:** Run the daemon in a separate terminal window while you code. Your AI context stays up-to-date without manual `amdb init` runs.
+
+---
+
 ## 🛠 Supported Languages
 
 `amdb` uses robust Tree-sitter parsers to fully understand the syntax and structure of:
@@ -99,6 +123,45 @@ This creates a targeted summary (e.g., in `.amdb/`) containing only the symbols 
 - **CSS** (`.css`)
 - **JSON** (`.json`)
 - **Bash** (`.sh`, `.bash`)
+
+---
+
+## ⚙️ Configuration
+
+### Custom Configuration (Optional)
+
+You can customize `amdb` behavior by creating an `amdb.toml` file in your project root:
+
+```toml
+server_port = 3000
+
+exclude_patterns = [
+    "target",
+    ".git",
+    "node_modules",
+    ".amdb",
+    ".fastembed_cache",
+    "__pycache__",
+    "dist",
+    "build"
+]
+```
+
+**Configuration Options:**
+- `server_port`: Port for future server features (default: 3000)
+- `exclude_patterns`: Directories and patterns to ignore during scanning
+
+### Verbose Mode
+
+Need detailed logs for debugging? Add the `--verbose` (or `-v`) flag to any command:
+
+```bash
+amdb init --verbose
+amdb generate --verbose
+amdb daemon --verbose
+```
+
+This outputs detailed debug information about file scanning, parsing, and embedding generation.
 
 ---
 
