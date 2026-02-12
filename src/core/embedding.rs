@@ -1,5 +1,5 @@
 use anyhow::Result;
-use fastembed::{TextEmbedding, InitOptions, EmbeddingModel};
+use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 
 pub struct EmbeddingEngine {
     model: TextEmbedding,

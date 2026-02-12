@@ -1,16 +1,16 @@
+use crate::core::embedding::EmbeddingEngine;
+use crate::core::graph::DependencyGraph;
+use crate::core::languages::SupportedLanguage;
+use crate::core::parser::{CodeParser, CodeSymbol, CodeWarning};
+use crate::core::vector_store::VectorStore;
+use crate::db::ContextDb;
 use anyhow::Result;
+use ignore::WalkBuilder;
+use rayon::prelude::*;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
-use rayon::prelude::*;
-use ignore::WalkBuilder;
-use tracing::{info, debug, warn, error};
-use crate::core::parser::{CodeParser, CodeSymbol, CodeWarning};
-use crate::core::vector_store::VectorStore;
-use crate::core::embedding::EmbeddingEngine;
-use crate::db::ContextDb;
-use crate::core::languages::SupportedLanguage;
-use crate::core::graph::DependencyGraph;
+use tracing::{debug, error, info, warn};
 
 pub struct Indexer;
 
@@ -37,13 +37,19 @@ impl Indexer {
         info!("Scanning files in {}...", root);
 
         let walker = WalkBuilder::new(root).build();
-        let entries: Vec<_> = walker.filter_map(|e| e.ok())
+        let entries: Vec<_> = walker
+            .filter_map(|e| e.ok())
             .filter(|e| e.file_type().map(|ft| ft.is_file()).unwrap_or(false))
             .collect();
 
-        info!("Indexing {} files using {} threads...", entries.len(), rayon::current_num_threads());
+        info!(
+            "Indexing {} files using {} threads...",
+            entries.len(),
+            rayon::current_num_threads()
+        );
 
-        let results: Vec<FileIndexData> = entries.par_iter()
+        let results: Vec<FileIndexData> = entries
+            .par_iter()
             .filter_map(|entry| {
                 let path = entry.path();
                 let lang = SupportedLanguage::from_path(path)?;
@@ -58,7 +64,9 @@ impl Indexer {
                         for symbol in &symbols {
                             let text = format!(
                                 "File: {}\nName: {}\nKind: {}\nDoc: {}",
-                                path_str, symbol.name, symbol.kind,
+                                path_str,
+                                symbol.name,
+                                symbol.kind,
                                 symbol.docstring.clone().unwrap_or_default()
                             );
 
@@ -77,11 +85,11 @@ impl Indexer {
                             warnings,
                             vectors,
                         })
-                    },
+                    }
                     Err(e) => {
                         warn!("Failed to parse {}: {}", path_str, e);
                         None
-                    },
+                    }
                 }
             })
             .collect();
@@ -140,7 +148,9 @@ impl Indexer {
                                 for symbol in symbols {
                                     let text = format!(
                                         "File: {}\nName: {}\nKind: {}\nDoc: {}",
-                                        path, symbol.name, symbol.kind,
+                                        path,
+                                        symbol.name,
+                                        symbol.kind,
                                         symbol.docstring.clone().unwrap_or_default()
                                     );
 

@@ -1,11 +1,11 @@
 use anyhow::Result;
-use tree_sitter::{Parser, Query, QueryCursor, Node};
-use serde::{Serialize, Deserialize};
-use regex::Regex;
 use lazy_static::lazy_static;
+use regex::Regex;
+use serde::{Deserialize, Serialize};
+use tree_sitter::{Node, Parser, Query, QueryCursor};
 
-pub use super::languages::SupportedLanguage;
 use super::graph::DependencyGraph;
+pub use super::languages::SupportedLanguage;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodeWarning {
@@ -17,10 +17,22 @@ pub struct CodeWarning {
 lazy_static! {
     static ref SECRET_PATTERNS: Vec<(&'static str, Regex)> = vec![
         ("AWS API Key", Regex::new(r"(?i)AKIA[0-9A-Z]{16}").unwrap()),
-        ("Google API Key", Regex::new(r"AIza[0-9A-Za-z\\-_]{35}").unwrap()),
-        ("Slack Token", Regex::new(r"xox[baprs]-([0-9a-zA-Z]{10,48})").unwrap()),
-        ("Private Key", Regex::new(r"-----BEGIN [A-Z ]+ PRIVATE KEY-----").unwrap()),
-        ("Hardcoded JWT", Regex::new(r"ey[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*").unwrap()),
+        (
+            "Google API Key",
+            Regex::new(r"AIza[0-9A-Za-z\\-_]{35}").unwrap()
+        ),
+        (
+            "Slack Token",
+            Regex::new(r"xox[baprs]-([0-9a-zA-Z]{10,48})").unwrap()
+        ),
+        (
+            "Private Key",
+            Regex::new(r"-----BEGIN [A-Z ]+ PRIVATE KEY-----").unwrap()
+        ),
+        (
+            "Hardcoded JWT",
+            Regex::new(r"ey[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*").unwrap()
+        ),
     ];
 }
 
@@ -51,11 +63,25 @@ impl CodeParser {
         let mut parser = Parser::new();
         let ts_lang = lang.get_language();
         parser.set_language(&ts_lang)?;
-        Ok(Self { parser, language: lang })
+        Ok(Self {
+            parser,
+            language: lang,
+        })
     }
 
-    pub fn parse(&mut self, file_path: &str, code: &str) -> Result<(Vec<CodeSymbol>, DependencyGraph, Vec<CodeRoute>, Vec<CodeWarning>)> {
-        let tree = self.parser.parse(code, None)
+    pub fn parse(
+        &mut self,
+        file_path: &str,
+        code: &str,
+    ) -> Result<(
+        Vec<CodeSymbol>,
+        DependencyGraph,
+        Vec<CodeRoute>,
+        Vec<CodeWarning>,
+    )> {
+        let tree = self
+            .parser
+            .parse(code, None)
             .ok_or_else(|| anyhow::anyhow!("Parsing failed"))?;
 
         let ts_lang = self.language.get_language();
@@ -74,13 +100,15 @@ impl CodeParser {
                     let start_byte = m.start();
                     let end_byte = m.end();
 
-                    if let Some(node) = tree.root_node().descendant_for_byte_range(start_byte, end_byte) {
+                    if let Some(node) = tree
+                        .root_node()
+                        .descendant_for_byte_range(start_byte, end_byte)
+                    {
                         let kind = node.kind();
 
                         if kind.contains("comment") {
                             continue;
                         }
-
                     }
 
                     let line = code[..start_byte].lines().count() + 1;
@@ -110,12 +138,12 @@ impl CodeParser {
                     "Function" | "Class" | "Interface" | "Method" | "Struct" => {
                         kind = capture_name.to_string();
                         name = text;
-                    },
+                    }
                     "Call" => {
                         if let Some(caller) = self.find_parent_function(capture.node, code) {
                             graph.add_edge(file_path, &caller, &text);
                         }
-                    },
+                    }
                     "doc" => docstring = Some(text),
                     "sig" => signature = Some(text),
                     "pub" => is_public = true,
@@ -127,14 +155,20 @@ impl CodeParser {
 
             if !name.is_empty() && !kind.is_empty() {
                 symbols.push(CodeSymbol {
-                    kind, name, line: m.pattern_index,
-                    docstring, signature, is_public
+                    kind,
+                    name,
+                    line: m.pattern_index,
+                    docstring,
+                    signature,
+                    is_public,
                 });
             }
 
             if let (Some(method), Some(path)) = (route_method, route_path) {
                 routes.push(CodeRoute {
-                    method, path, handler: None
+                    method,
+                    path,
+                    handler: None,
                 });
             }
         }
@@ -148,7 +182,10 @@ impl CodeParser {
             let kind = n.kind();
             if kind.contains("function") || kind.contains("method") {
                 if let Some(name_node) = n.child_by_field_name("name") {
-                    return name_node.utf8_text(code.as_bytes()).ok().map(|s| s.to_string());
+                    return name_node
+                        .utf8_text(code.as_bytes())
+                        .ok()
+                        .map(|s| s.to_string());
                 }
             }
             curr = n.parent();

@@ -1,7 +1,7 @@
-use rusqlite::{params, Connection, Result};
-use std::path::Path;
 use crate::core::parser::{CodeSymbol, CodeWarning};
 use crate::db::schema;
+use rusqlite::{params, Connection, Result};
+use std::path::Path;
 
 pub struct Relationship {
     pub caller: String,
@@ -24,7 +24,10 @@ impl ContextDb {
 
     pub fn save_symbols(&mut self, file_path: &str, symbols: &[CodeSymbol]) -> Result<()> {
         let tx = self.conn.transaction()?;
-        tx.execute("DELETE FROM symbols WHERE file_path = ?1", params![file_path])?;
+        tx.execute(
+            "DELETE FROM symbols WHERE file_path = ?1",
+            params![file_path],
+        )?;
 
         {
             let mut stmt = tx.prepare(
@@ -32,19 +35,32 @@ impl ContextDb {
             )?;
 
             for sym in symbols {
-                stmt.execute(params![file_path, sym.name, sym.kind, sym.line, sym.docstring])?;
+                stmt.execute(params![
+                    file_path,
+                    sym.name,
+                    sym.kind,
+                    sym.line,
+                    sym.docstring
+                ])?;
             }
         }
         tx.commit()
     }
 
-    pub fn save_relationships(&mut self, file_path: &str, graph: &crate::core::graph::DependencyGraph) -> Result<()> {
+    pub fn save_relationships(
+        &mut self,
+        file_path: &str,
+        graph: &crate::core::graph::DependencyGraph,
+    ) -> Result<()> {
         let tx = self.conn.transaction()?;
-        tx.execute("DELETE FROM relationships WHERE file_path = ?1", params![file_path])?;
+        tx.execute(
+            "DELETE FROM relationships WHERE file_path = ?1",
+            params![file_path],
+        )?;
 
         {
             let mut stmt = tx.prepare(
-                "INSERT INTO relationships (file_path, caller, callee) VALUES (?1, ?2, ?3)"
+                "INSERT INTO relationships (file_path, caller, callee) VALUES (?1, ?2, ?3)",
             )?;
 
             for (caller, callees) in &graph.edges {
@@ -58,11 +74,14 @@ impl ContextDb {
 
     pub fn save_warnings(&mut self, file_path: &str, warnings: &[CodeWarning]) -> Result<()> {
         let tx = self.conn.transaction()?;
-        tx.execute("DELETE FROM warnings WHERE file_path = ?1", params![file_path])?;
+        tx.execute(
+            "DELETE FROM warnings WHERE file_path = ?1",
+            params![file_path],
+        )?;
 
         {
             let mut stmt = tx.prepare(
-                "INSERT INTO warnings (file_path, kind, message, line) VALUES (?1, ?2, ?3, ?4)"
+                "INSERT INTO warnings (file_path, kind, message, line) VALUES (?1, ?2, ?3, ?4)",
             )?;
 
             for w in warnings {
@@ -71,17 +90,28 @@ impl ContextDb {
         }
         tx.commit()
     }
-    
+
     pub fn remove_file_data(&mut self, file_path: &str) -> Result<()> {
         let tx = self.conn.transaction()?;
-        tx.execute("DELETE FROM symbols WHERE file_path = ?1", params![file_path])?;
-        tx.execute("DELETE FROM relationships WHERE file_path = ?1", params![file_path])?;
-        tx.execute("DELETE FROM warnings WHERE file_path = ?1", params![file_path])?;
+        tx.execute(
+            "DELETE FROM symbols WHERE file_path = ?1",
+            params![file_path],
+        )?;
+        tx.execute(
+            "DELETE FROM relationships WHERE file_path = ?1",
+            params![file_path],
+        )?;
+        tx.execute(
+            "DELETE FROM warnings WHERE file_path = ?1",
+            params![file_path],
+        )?;
         tx.commit()
     }
 
     pub fn get_symbols(&self, file_path: &str) -> Result<Vec<CodeSymbol>> {
-        let mut stmt = self.conn.prepare("SELECT name, kind, line, docstring FROM symbols WHERE file_path = ?1")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT name, kind, line, docstring FROM symbols WHERE file_path = ?1")?;
         let rows = stmt.query_map(params![file_path], |row| {
             Ok(CodeSymbol {
                 name: row.get(0)?,
@@ -102,7 +132,9 @@ impl ContextDb {
 
     #[allow(dead_code)]
     pub fn get_relationships(&self, file_path: &str) -> Result<Vec<Relationship>> {
-        let mut stmt = self.conn.prepare("SELECT caller, callee FROM relationships WHERE file_path = ?1")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT caller, callee FROM relationships WHERE file_path = ?1")?;
         let rows = stmt.query_map(params![file_path], |row| {
             Ok(Relationship {
                 caller: row.get(0)?,
@@ -119,7 +151,9 @@ impl ContextDb {
 
     #[allow(dead_code)]
     pub fn get_warnings(&self, file_path: &str) -> Result<Vec<CodeWarning>> {
-        let mut stmt = self.conn.prepare("SELECT kind, message, line FROM warnings WHERE file_path = ?1")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT kind, message, line FROM warnings WHERE file_path = ?1")?;
         let rows = stmt.query_map(params![file_path], |row| {
             Ok(CodeWarning {
                 kind: row.get(0)?,
@@ -136,7 +170,9 @@ impl ContextDb {
     }
 
     pub fn get_all_files(&self) -> Result<Vec<String>> {
-        let mut stmt = self.conn.prepare("SELECT DISTINCT file_path FROM symbols ORDER BY file_path")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT DISTINCT file_path FROM symbols ORDER BY file_path")?;
         let rows = stmt.query_map([], |row| row.get(0))?;
 
         let mut files = Vec::new();
@@ -147,7 +183,9 @@ impl ContextDb {
     }
 
     pub fn get_all_relationships(&self) -> Result<Vec<Relationship>> {
-        let mut stmt = self.conn.prepare("SELECT caller, callee FROM relationships")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT caller, callee FROM relationships")?;
         let rows = stmt.query_map([], |row| {
             Ok(Relationship {
                 caller: row.get(0)?,

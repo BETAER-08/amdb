@@ -1,20 +1,20 @@
 use std::path::Path;
 use tree_sitter::Language;
 
-pub mod rust;
-pub mod python;
-pub mod javascript;
+pub mod bash;
 pub mod c;
 pub mod cpp;
-pub mod go;
-pub mod java;
 pub mod csharp;
-pub mod ruby;
-pub mod php;
-pub mod html;
 pub mod css;
+pub mod go;
+pub mod html;
+pub mod java;
+pub mod javascript;
 pub mod json;
-pub mod bash;
+pub mod php;
+pub mod python;
+pub mod ruby;
+pub mod rust;
 
 #[derive(Debug, Clone, Copy)]
 pub enum SupportedLanguage {

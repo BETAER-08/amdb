@@ -1,5 +1,5 @@
-use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Node {
@@ -26,12 +26,15 @@ impl DependencyGraph {
     #[allow(dead_code)]
     pub fn add_node(&mut self, file: &str, name: &str, kind: &str, line: usize) {
         let key = format!("{}::{}", file, name);
-        self.nodes.insert(key, Node {
-            file: file.to_string(),
-            name: name.to_string(),
-            kind: kind.to_string(),
-            line,
-        });
+        self.nodes.insert(
+            key,
+            Node {
+                file: file.to_string(),
+                name: name.to_string(),
+                kind: kind.to_string(),
+                line,
+            },
+        );
     }
 
     pub fn add_edge(&mut self, file: &str, caller: &str, callee: &str) {

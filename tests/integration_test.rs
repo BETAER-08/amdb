@@ -60,7 +60,12 @@ fn test_focus_mode() -> Result<(), Box<dyn std::error::Error>> {
     fs::write(&file_path, "fn login() {}")?;
 
     let mut cmd_init = Command::cargo_bin("amdb")?;
-    cmd_init.current_dir(root).arg("init").arg(".").assert().success();
+    cmd_init
+        .current_dir(root)
+        .arg("init")
+        .arg(".")
+        .assert()
+        .success();
 
     let mut cmd_focus = Command::cargo_bin("amdb")?;
     cmd_focus

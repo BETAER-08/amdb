@@ -1,14 +1,14 @@
 use clap::{Parser, Subcommand};
-use tracing::{info, error, Level};
+use tracing::{error, info, Level};
 use tracing_subscriber::FmtSubscriber;
 
 mod core;
 mod daemon;
 mod db;
 
+use crate::core::generator::ContextGenerator;
 use crate::core::indexer::Indexer;
 use crate::daemon::watcher::FileWatcher;
-use crate::core::generator::ContextGenerator;
 
 #[derive(Parser)]
 #[command(name = "amdb")]
@@ -41,7 +41,11 @@ enum Commands {
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    let log_level = if cli.verbose { Level::DEBUG } else { Level::INFO };
+    let log_level = if cli.verbose {
+        Level::DEBUG
+    } else {
+        Level::INFO
+    };
 
     let subscriber = FmtSubscriber::builder()
         .with_max_level(log_level)
@@ -49,15 +53,12 @@ async fn main() -> anyhow::Result<()> {
         .without_time()
         .finish();
 
-    tracing::subscriber::set_global_default(subscriber)
-        .expect("setting default subscriber failed");
+    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
     match cli.command {
         Commands::Init { path } => {
             info!("Initializing amdb in: {}", path);
-            let res = tokio::task::spawn_blocking(move || {
-                Indexer::scan_project(&path)
-            }).await?;
+            let res = tokio::task::spawn_blocking(move || Indexer::scan_project(&path)).await?;
 
             if let Err(e) = res {
                 error!("Init failed: {}", e);

@@ -1,9 +1,9 @@
 use anyhow::Result;
 use rusqlite::{params, Connection};
-use std::path::Path;
+use serde::{Deserialize, Serialize};
 use std::cmp::{Ordering, Reverse};
 use std::collections::BinaryHeap;
-use serde::{Serialize, Deserialize};
+use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VectorRecord {
@@ -37,7 +37,9 @@ impl PartialOrd for SearchCandidate {
 
 impl Ord for SearchCandidate {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.score.partial_cmp(&other.score).unwrap_or(Ordering::Equal)
+        self.score
+            .partial_cmp(&other.score)
+            .unwrap_or(Ordering::Equal)
     }
 }
 
@@ -73,7 +75,13 @@ impl VectorStore {
         Ok(())
     }
 
-    pub fn add(&mut self, file_path: String, id: String, text: String, vector: Vec<f32>) -> Result<()> {
+    pub fn add(
+        &mut self,
+        file_path: String,
+        id: String,
+        text: String,
+        vector: Vec<f32>,
+    ) -> Result<()> {
         let vector_blob = bincode::serialize(&vector)?;
 
         self.conn.execute(
@@ -92,7 +100,9 @@ impl VectorStore {
     }
 
     pub fn search(&self, query_vec: &[f32], limit: usize) -> Result<Vec<(f64, VectorRecord)>> {
-        let mut stmt = self.conn.prepare("SELECT id, file_path, text, vector FROM vectors")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, file_path, text, vector FROM vectors")?;
 
         let mut rows = stmt.query([])?;
         let mut heap: BinaryHeap<Reverse<SearchCandidate>> = BinaryHeap::with_capacity(limit);
@@ -106,7 +116,12 @@ impl VectorStore {
 
             let score = cosine_similarity(query_vec, &vector);
 
-            let record = VectorRecord { id, file_path, text, vector };
+            let record = VectorRecord {
+                id,
+                file_path,
+                text,
+                vector,
+            };
 
             if heap.len() < limit {
                 heap.push(Reverse(SearchCandidate { score, record }));
@@ -136,6 +151,8 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f64 {
     let dot_product: f32 = a.iter().zip(b).map(|(x, y)| x * y).sum();
     let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
     let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
-    if norm_a == 0.0 || norm_b == 0.0 { return 0.0; }
+    if norm_a == 0.0 || norm_b == 0.0 {
+        return 0.0;
+    }
     (dot_product / (norm_a * norm_b)) as f64
 }

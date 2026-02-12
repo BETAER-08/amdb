@@ -1,11 +1,11 @@
+use crate::core::embedding::EmbeddingEngine;
+use crate::core::vector_store::VectorStore;
+use crate::db::ContextDb;
 use anyhow::Result;
+use console::style;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
-use console::style;
-use crate::db::ContextDb;
-use crate::core::vector_store::VectorStore;
-use crate::core::embedding::EmbeddingEngine;
 
 pub struct ContextGenerator;
 
@@ -19,7 +19,10 @@ impl ContextGenerator {
         }
 
         if !db_dir.exists() {
-            println!("{}", style("Error: Database not found. Run 'amdb init' first.").red());
+            println!(
+                "{}",
+                style("Error: Database not found. Run 'amdb init' first.").red()
+            );
             return Ok(());
         }
 
@@ -31,7 +34,10 @@ impl ContextGenerator {
             let safe_name = query.replace(" ", "-").replace("/", "-").to_lowercase();
             output_filename = format!("{}.md", safe_name);
 
-            println!("{}", style(format!("Filtering context for: '{}'...", query)).cyan());
+            println!(
+                "{}",
+                style(format!("Filtering context for: '{}'...", query)).cyan()
+            );
 
             let vector_path = db_dir.join("vector");
 
@@ -40,10 +46,17 @@ impl ContextGenerator {
             let query_vec = embedder.embed(&query)?;
             let results = store.search(&query_vec, 10)?;
 
-            println!("DEBUG: Search found {} matches for query '{}'", results.len(), query);
+            println!(
+                "DEBUG: Search found {} matches for query '{}'",
+                results.len(),
+                query
+            );
 
             if results.is_empty() {
-                println!("{}", style("No matches found. Falling back to full context.").yellow());
+                println!(
+                    "{}",
+                    style("No matches found. Falling back to full context.").yellow()
+                );
                 target_files = db.get_all_files()?;
             } else {
                 let mut paths = Vec::new();
@@ -56,8 +69,7 @@ impl ContextGenerator {
                 }
                 target_files = paths;
             }
-        }
-        else {
+        } else {
             output_filename = "context.md".to_string();
             println!("{}", style("Generating full project context...").blue());
             target_files = db.get_all_files()?;
@@ -72,7 +84,9 @@ impl ContextGenerator {
         content.push_str("## File Summaries\n\n");
         for file_path in &target_files {
             let symbols = db.get_symbols(file_path)?;
-            if symbols.is_empty() { continue; }
+            if symbols.is_empty() {
+                continue;
+            }
 
             content.push_str(&format!("### {}\n", file_path));
 
@@ -94,7 +108,9 @@ impl ContextGenerator {
         let mut edge_count = 0;
 
         for edge in all_edges {
-            if edge_count > 100 { break; }
+            if edge_count > 100 {
+                break;
+            }
 
             let caller = edge.caller.replace("::", "_").replace(".", "_");
             let callee = edge.callee.replace("::", "_").replace(".", "_");
@@ -108,7 +124,12 @@ impl ContextGenerator {
         let mut file = File::create(&output_path)?;
         file.write_all(content.as_bytes())?;
 
-        println!("{}", style(format!("Generated: {}", output_path.display())).green().bold());
+        println!(
+            "{}",
+            style(format!("Generated: {}", output_path.display()))
+                .green()
+                .bold()
+        );
         Ok(())
     }
 }

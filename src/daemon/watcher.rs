@@ -1,10 +1,10 @@
-use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher, EventKind};
-use notify::event::{ModifyKind, RenameMode};
-use std::path::Path;
-use std::sync::mpsc::channel;
-use tracing::{info, debug, error};
 use crate::core::indexer::Indexer;
 use crate::core::languages::SupportedLanguage;
+use notify::event::{ModifyKind, RenameMode};
+use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use std::path::Path;
+use std::sync::mpsc::channel;
+use tracing::{debug, error, info};
 
 pub struct FileWatcher;
 
@@ -60,18 +60,18 @@ impl FileWatcher {
                                     if let Err(e) = Indexer::update_file(root, &path_str) {
                                         error!("Indexing error: {}", e);
                                     }
-                                },
+                                }
                                 EventKind::Remove(_) => {
                                     debug!("Detected removal of: {}", path_str);
                                     if let Err(e) = Indexer::remove_file(root, &path_str) {
                                         error!("Removal error: {}", e);
                                     }
-                                },
+                                }
                                 _ => {}
                             }
                         }
                     }
-                },
+                }
                 Err(e) => error!("Watch error: {:?}", e),
             }
         }

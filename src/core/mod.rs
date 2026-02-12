@@ -1,8 +1,8 @@
-pub mod parser;
+pub mod config;
+pub mod embedding;
+pub mod generator;
 pub mod graph;
 pub mod indexer;
 pub mod languages;
-pub mod embedding;
+pub mod parser;
 pub mod vector_store;
-pub mod config;
-pub mod generator;
