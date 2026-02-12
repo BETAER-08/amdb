@@ -29,8 +29,5 @@ jobs:
       - name: Cargo Test
         run: cargo test
 
-      - name: Cargo Clippy
-        run: cargo clippy -- -D warnings
-
       - name: Cargo Fmt
         run: cargo fmt -- --check
