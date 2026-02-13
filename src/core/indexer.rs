@@ -1,3 +1,4 @@
+use crate::core::config::Config;
 use crate::core::embedding::EmbeddingEngine;
 use crate::core::graph::DependencyGraph;
 use crate::core::languages::SupportedLanguage;
@@ -7,7 +8,6 @@ use crate::db::ContextDb;
 use anyhow::Result;
 use ignore::WalkBuilder;
 use rayon::prelude::*;
-use serde::Deserialize;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
@@ -23,18 +23,10 @@ struct FileIndexData {
     vectors: Vec<(String, String, Vec<f32>)>,
 }
 
-const DEFAULT_EXCLUDES: &[&str] = &[
-    "target", ".git", "node_modules", ".amdb", ".fastembed_cache", "__pycache__", ".database"
-];
-
-#[derive(Deserialize, Default)]
-struct AmdbConfig {
-    exclude_patterns: Option<Vec<String>>,
-}
-
 impl Indexer {
     pub fn scan_project(root: &str) -> Result<()> {
-        let db_dir = Path::new(root).join(".database");
+        let config = Config::load(root);
+        let db_dir = Path::new(root).join(&config.db_path);
         let vector_path = db_dir.join("vector");
 
         fs::create_dir_all(&vector_path)?;
@@ -43,17 +35,7 @@ impl Indexer {
         let mut vector_store = VectorStore::open(&vector_path)?;
 
         let embedder = Arc::new(EmbeddingEngine::new()?);
-
-        let config_path = Path::new(root).join("amdb.toml");
-        let mut excludes: Vec<String> = DEFAULT_EXCLUDES.iter().map(|s| s.to_string()).collect();
-
-        if let Ok(config_str) = fs::read_to_string(&config_path) {
-            if let Ok(config) = toml::from_str::<AmdbConfig>(&config_str) {
-                if let Some(custom_excludes) = config.exclude_patterns {
-                    excludes.extend(custom_excludes);
-                }
-            }
-        }
+        let excludes = config.ignore_patterns;
 
         info!("Scanning files in {}...", root);
 
@@ -173,7 +155,8 @@ impl Indexer {
     }
 
     pub fn update_file(root: &str, path: &str) -> Result<()> {
-        let db_dir = Path::new(root).join(".database");
+        let config = Config::load(root);
+        let db_dir = Path::new(root).join(&config.db_path);
         let vector_path = db_dir.join("vector");
 
         let mut db = ContextDb::open(&db_dir)?;
@@ -237,7 +220,8 @@ impl Indexer {
     }
 
     pub fn remove_file(root: &str, path: &str) -> Result<()> {
-        let db_dir = Path::new(root).join(".database");
+        let config = Config::load(root);
+        let db_dir = Path::new(root).join(&config.db_path);
         let vector_path = db_dir.join("vector");
 
         let mut db = ContextDb::open(&db_dir)?;

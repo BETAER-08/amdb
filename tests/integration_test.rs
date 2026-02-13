@@ -1,5 +1,6 @@
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
+use std::env;
 use std::fs;
 use tempfile::TempDir;
 
@@ -105,7 +106,7 @@ fn test_dynamic_config_exclude() -> Result<(), Box<dyn std::error::Error>> {
     let root = temp_dir.path();
 
     let config_path = root.join("amdb.toml");
-    fs::write(&config_path, "exclude_patterns = [\"secret_vault\"]\n")?;
+    fs::write(&config_path, "ignore_patterns = [\"secret_vault\"]\n")?;
 
     let secret_dir = root.join("secret_vault");
     fs::create_dir(&secret_dir)?;
@@ -127,5 +128,43 @@ fn test_dynamic_config_exclude() -> Result<(), Box<dyn std::error::Error>> {
     assert!(content.contains("public_api"));
     assert!(!content.contains("top_secret"));
 
+    Ok(())
+}
+
+#[test]
+fn test_config_toml_override_db_path() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = TempDir::new()?;
+    let root = temp_dir.path();
+
+    let config_path = root.join("amdb.toml");
+    fs::write(&config_path, "db_path = \".custom_toml_db\"\nignore_patterns = [\"test_ignore\"]")?;
+
+    let mut cmd_init = cargo_bin_cmd!("amdb");
+    cmd_init
+        .current_dir(root)
+        .arg("init")
+        .arg(".")
+        .assert()
+        .success();
+
+    assert!(root.join(".custom_toml_db").exists());
+    Ok(())
+}
+
+#[test]
+fn test_config_env_override_integration() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = TempDir::new()?;
+    let root = temp_dir.path();
+
+    let mut cmd_init = cargo_bin_cmd!("amdb");
+    cmd_init
+        .current_dir(root)
+        .env("AMDB_DB_PATH", ".custom_env_db")
+        .arg("init")
+        .arg(".")
+        .assert()
+        .success();
+
+    assert!(root.join(".custom_env_db").exists());
     Ok(())
 }
