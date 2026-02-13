@@ -1,7 +1,7 @@
 # amdb: AI 컨텍스트 생성기
 
 ![Rust](https://img.shields.io/badge/built_with-Rust-dca282.svg)
-![Version](https://img.shields.io/badge/version-0.3.3-blue.svg)
+![Version](https://img.shields.io/badge/version-0.4.0-blue.svg)
 <p align="left">
   <img src="amdb.png" alt="amdb logo" width="60">
 </p>
