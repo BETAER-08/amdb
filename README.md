@@ -9,7 +9,7 @@
 ---
 ## 📄 Related documents
 
-### [korean](readmekr.md) 
+### [korean](readmekr.md)
 ### [benchmark](benchmark.md)
 ### [crates.io](https://crates.io/crates/amdb)
 ---
@@ -69,7 +69,7 @@ amdb generate
 
 ## 🧠 Advanced Usage: Focus Mode
 
-For large projects, a full context might be too big. Use **Focus Mode** to generate a summary relevant to a specific feature or bug. `amdb` uses vector search to find the most relevant files.
+For large projects, a full context might be too big. Use **Focus Mode** to generate a summary relevant to a specific feature or bug. `amdb` uses **hybrid search** (exact match first, then vector search) to find the most relevant files.
 
 ```bash
 # Example: generating context for authentication logic
@@ -77,6 +77,32 @@ amdb generate --focus "login authentication jwt"
 ```
 
 This creates a targeted summary (e.g., in `.amdb/`) containing only the symbols and files relevant to "login authentication jwt".
+
+### 🎯 Depth Control: Expand Context with Call Graph
+
+When using focus mode, you can control how deeply `amdb` explores related files using the **call graph**. The `--depth` flag determines how many levels of function calls to traverse from your initial matches.
+
+```bash
+# Depth 0: Only files that exactly match the query
+amdb generate --focus "authenticate" --depth 0
+
+# Depth 1 (default): Include files directly called by matched files
+amdb generate --focus "authenticate" --depth 1
+
+# Depth 2: Include files 2 levels deep in the call chain
+amdb generate --focus "authenticate" --depth 2
+```
+
+**How it works:**
+1. **Exact Match Priority**: First looks for files/symbols that exactly match your query
+2. **Vector Search Fallback**: If no exact matches found, uses semantic similarity search
+3. **Call Graph Traversal**: Expands context by following function calls to depth N
+4. **Smart Filtering**: Only includes files within similarity threshold (0.25) to keep context relevant
+
+**Example Use Cases:**
+- `--depth 0`: When you need only the core implementation (e.g., a single module)
+- `--depth 1`: When you need immediate dependencies (default, works for most cases)
+- `--depth 2+`: When debugging complex issues that span multiple layers
 
 ---
 
