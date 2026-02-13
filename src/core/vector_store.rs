@@ -1,8 +1,8 @@
 use anyhow::Result;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
-use std::cmp::{Ordering, Reverse};
-use std::collections::BinaryHeap;
+use rayon::prelude::*;
+use std::cmp::Ordering;
 use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,27 +20,6 @@ pub struct VectorStore {
 struct SearchCandidate {
     score: f64,
     record: VectorRecord,
-}
-
-impl PartialEq for SearchCandidate {
-    fn eq(&self, other: &Self) -> bool {
-        self.score == other.score
-    }
-}
-impl Eq for SearchCandidate {}
-
-impl PartialOrd for SearchCandidate {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for SearchCandidate {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.score
-            .partial_cmp(&other.score)
-            .unwrap_or(Ordering::Equal)
-    }
 }
 
 impl VectorStore {
@@ -100,46 +79,37 @@ impl VectorStore {
     }
 
     pub fn search(&self, query_vec: &[f32], limit: usize) -> Result<Vec<(f64, VectorRecord)>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT id, file_path, text, vector FROM vectors")?;
+        let mut stmt = self.conn.prepare("SELECT id, file_path, text, vector FROM vectors")?;
 
         let mut rows = stmt.query([])?;
-        let mut heap: BinaryHeap<Reverse<SearchCandidate>> = BinaryHeap::with_capacity(limit);
+        let mut records = Vec::new();
 
         while let Some(row) = rows.next()? {
             let id: String = row.get(0)?;
             let file_path: String = row.get(1)?;
             let text: String = row.get(2)?;
             let vector_blob: Vec<u8> = row.get(3)?;
-            let vector: Vec<f32> = bincode::deserialize(&vector_blob)?;
+            records.push((id, file_path, text, vector_blob));
+        }
 
-            let score = cosine_similarity(query_vec, &vector);
-
-            let record = VectorRecord {
-                id,
-                file_path,
-                text,
-                vector,
-            };
-
-            if heap.len() < limit {
-                heap.push(Reverse(SearchCandidate { score, record }));
-            } else if let Some(Reverse(min_item)) = heap.peek() {
-                if score > min_item.score {
-                    heap.pop();
-                    heap.push(Reverse(SearchCandidate { score, record }));
+        let mut evaluated: Vec<SearchCandidate> = records.into_par_iter()
+            .filter_map(|(id, file_path, text, vector_blob)| {
+                if let Ok(vector) = bincode::deserialize::<Vec<f32>>(&vector_blob) {
+                    let score = cosine_similarity(query_vec, &vector);
+                    Some(SearchCandidate {
+                        score,
+                        record: VectorRecord { id, file_path, text, vector }
+                    })
+                } else {
+                    None
                 }
-            }
-        }
+            })
+            .collect();
 
-        let mut results = Vec::with_capacity(limit);
-        while let Some(Reverse(item)) = heap.pop() {
-            results.push((item.score, item.record));
-        }
-        results.reverse();
+        evaluated.sort_unstable_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
+        evaluated.truncate(limit);
 
-        Ok(results)
+        Ok(evaluated.into_iter().map(|c| (c.score, c.record)).collect())
     }
 
     pub fn save(&self, _path: &Path) -> Result<()> {

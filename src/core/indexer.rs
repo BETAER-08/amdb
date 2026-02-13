@@ -7,6 +7,7 @@ use crate::db::ContextDb;
 use anyhow::Result;
 use ignore::WalkBuilder;
 use rayon::prelude::*;
+use serde::Deserialize;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
@@ -26,6 +27,11 @@ const DEFAULT_EXCLUDES: &[&str] = &[
     "target", ".git", "node_modules", ".amdb", ".fastembed_cache", "__pycache__", ".database"
 ];
 
+#[derive(Deserialize, Default)]
+struct AmdbConfig {
+    exclude_patterns: Option<Vec<String>>,
+}
+
 impl Indexer {
     pub fn scan_project(root: &str) -> Result<()> {
         let db_dir = Path::new(root).join(".database");
@@ -38,12 +44,23 @@ impl Indexer {
 
         let embedder = Arc::new(EmbeddingEngine::new()?);
 
+        let config_path = Path::new(root).join("amdb.toml");
+        let mut excludes: Vec<String> = DEFAULT_EXCLUDES.iter().map(|s| s.to_string()).collect();
+
+        if let Ok(config_str) = fs::read_to_string(&config_path) {
+            if let Ok(config) = toml::from_str::<AmdbConfig>(&config_str) {
+                if let Some(custom_excludes) = config.exclude_patterns {
+                    excludes.extend(custom_excludes);
+                }
+            }
+        }
+
         info!("Scanning files in {}...", root);
 
         let walker = WalkBuilder::new(root)
-            .filter_entry(|entry| {
+            .filter_entry(move |entry| {
                 let path_str = entry.path().to_string_lossy();
-                !DEFAULT_EXCLUDES.iter().any(|p| path_str.contains(p))
+                !excludes.iter().any(|p| path_str.contains(p))
             })
             .build();
 
@@ -62,10 +79,28 @@ impl Indexer {
             .par_iter()
             .filter_map(|entry| {
                 let path = entry.path();
-                let lang = SupportedLanguage::from_path(path)?;
-                let mut parser = CodeParser::new(lang).ok()?;
-                let code = fs::read_to_string(path).ok()?;
                 let path_str = path.to_string_lossy().to_string();
+
+                let lang = match SupportedLanguage::from_path(path) {
+                    Some(l) => l,
+                    None => return None,
+                };
+
+                let mut parser = match CodeParser::new(lang) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        warn!("Failed to initialize parser for {}: {}", path_str, e);
+                        return None;
+                    }
+                };
+
+                let code = match fs::read_to_string(path) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        warn!("Failed to read file {}: {}", path_str, e);
+                        return None;
+                    }
+                };
 
                 match parser.parse(&path_str, &code) {
                     Ok((symbols, graph, _, warnings)) => {
@@ -80,9 +115,12 @@ impl Indexer {
                                 symbol.docstring.clone().unwrap_or_default()
                             );
 
-                            if let Ok(embedding) = embedder.embed(&text) {
-                                let id = format!("{}::{}", path_str, symbol.name);
-                                vectors.push((id, text, embedding));
+                            match embedder.embed(&text) {
+                                Ok(embedding) => {
+                                    let id = format!("{}::{}", path_str, symbol.name);
+                                    vectors.push((id, text, embedding));
+                                }
+                                Err(e) => warn!("Failed to embed symbol {} in {}: {}", symbol.name, path_str, e),
                             }
                         }
 
@@ -147,35 +185,44 @@ impl Indexer {
         let path_obj = Path::new(path);
         if path_obj.exists() {
             if let Some(lang) = SupportedLanguage::from_path(path_obj) {
-                if let Ok(mut parser) = CodeParser::new(lang) {
-                    if let Ok(code) = fs::read_to_string(path_obj) {
-                        match parser.parse(path, &code) {
-                            Ok((symbols, graph, _, warnings)) => {
-                                db.save_symbols(path, &symbols)?;
-                                db.save_relationships(path, &graph)?;
-                                db.save_warnings(path, &warnings)?;
+                match CodeParser::new(lang) {
+                    Ok(mut parser) => {
+                        match fs::read_to_string(path_obj) {
+                            Ok(code) => {
+                                match parser.parse(path, &code) {
+                                    Ok((symbols, graph, _, warnings)) => {
+                                        db.save_symbols(path, &symbols)?;
+                                        db.save_relationships(path, &graph)?;
+                                        db.save_warnings(path, &warnings)?;
 
-                                for symbol in symbols {
-                                    let text = format!(
-                                        "File: {}\nName: {}\nKind: {}\nDoc: {}",
-                                        path,
-                                        symbol.name,
-                                        symbol.kind,
-                                        symbol.docstring.clone().unwrap_or_default()
-                                    );
+                                        for symbol in symbols {
+                                            let text = format!(
+                                                "File: {}\nName: {}\nKind: {}\nDoc: {}",
+                                                path,
+                                                symbol.name,
+                                                symbol.kind,
+                                                symbol.docstring.clone().unwrap_or_default()
+                                            );
 
-                                    if let Ok(embedding) = embedder.embed(&text) {
-                                        let id = format!("{}::{}", path, symbol.name);
-                                        vector_store.add(path.to_string(), id, text, embedding)?;
+                                            match embedder.embed(&text) {
+                                                Ok(embedding) => {
+                                                    let id = format!("{}::{}", path, symbol.name);
+                                                    if let Err(e) = vector_store.add(path.to_string(), id, text, embedding) {
+                                                        error!("Failed to add vector for {}: {}", path, e);
+                                                    }
+                                                }
+                                                Err(e) => warn!("Failed to generate embedding for {}::{}: {}", path, symbol.name, e),
+                                            }
+                                        }
+                                        debug!("Successfully updated index for: {}", path);
                                     }
+                                    Err(e) => warn!("Failed to parse update for {}: {}", path, e),
                                 }
-                                debug!("Successfully updated index for: {}", path);
                             }
-                            Err(e) => warn!("Failed to parse update for {}: {}", path, e),
+                            Err(e) => warn!("Failed to read file {}: {}", path, e),
                         }
-                    } else {
-                        warn!("Failed to read file: {}", path);
                     }
+                    Err(e) => warn!("Failed to initialize parser for {}: {}", path, e),
                 }
             } else {
                 debug!("Skipping update for unsupported language: {}", path);
