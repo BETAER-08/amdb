@@ -1,4 +1,3 @@
-pub mod config;
 pub mod embedding;
 pub mod generator;
 pub mod graph;
