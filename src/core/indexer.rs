@@ -1,3 +1,4 @@
+use crate::core::config::AppConfig;
 use crate::core::embedding::EmbeddingEngine;
 use crate::core::graph::DependencyGraph;
 use crate::core::languages::SupportedLanguage;
@@ -23,7 +24,7 @@ struct FileIndexData {
 }
 
 impl Indexer {
-    pub fn scan_project(root: &str) -> Result<()> {
+    pub fn scan_project(root: &str, config: &AppConfig) -> Result<()> {
         let db_dir = Path::new(root).join(".database");
         let vector_path = db_dir.join("vector");
 
@@ -36,7 +37,14 @@ impl Indexer {
 
         info!("Scanning files in {}...", root);
 
-        let walker = WalkBuilder::new(root).build();
+        let config_excludes = config.exclude_patterns.clone();
+        let walker = WalkBuilder::new(root)
+            .filter_entry(move |entry| {
+                let path_str = entry.path().to_string_lossy();
+                !config_excludes.iter().any(|p| path_str.contains(p))
+            })
+            .build();
+
         let entries: Vec<_> = walker
             .filter_map(|e| e.ok())
             .filter(|e| e.file_type().map(|ft| ft.is_file()).unwrap_or(false))

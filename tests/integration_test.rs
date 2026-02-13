@@ -1,4 +1,4 @@
-use assert_cmd::Command;
+use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
 use std::fs;
 use tempfile::TempDir;
@@ -21,7 +21,7 @@ fn test_end_to_end_workflow() -> Result<(), Box<dyn std::error::Error>> {
     "#;
     fs::write(&main_rs, code)?;
 
-    let mut cmd_init = Command::cargo_bin("amdb")?;
+    let mut cmd_init = cargo_bin_cmd!("amdb");
 
     cmd_init
         .current_dir(root)
@@ -34,7 +34,7 @@ fn test_end_to_end_workflow() -> Result<(), Box<dyn std::error::Error>> {
     assert!(root.join(".database").exists());
     assert!(root.join(".database/vector/vectors.db").exists());
 
-    let mut cmd_gen = Command::cargo_bin("amdb")?;
+    let mut cmd_gen = cargo_bin_cmd!("amdb");
 
     cmd_gen
         .current_dir(root)
@@ -59,7 +59,7 @@ fn test_focus_mode() -> Result<(), Box<dyn std::error::Error>> {
     let file_path = root.join("auth.rs");
     fs::write(&file_path, "fn login() {}")?;
 
-    let mut cmd_init = Command::cargo_bin("amdb")?;
+    let mut cmd_init = cargo_bin_cmd!("amdb");
     cmd_init
         .current_dir(root)
         .arg("init")
@@ -67,7 +67,7 @@ fn test_focus_mode() -> Result<(), Box<dyn std::error::Error>> {
         .assert()
         .success();
 
-    let mut cmd_focus = Command::cargo_bin("amdb")?;
+    let mut cmd_focus = cargo_bin_cmd!("amdb");
     cmd_focus
         .current_dir(root)
         .arg("generate")
@@ -77,6 +77,47 @@ fn test_focus_mode() -> Result<(), Box<dyn std::error::Error>> {
         .success();
 
     assert!(root.join(".amdb/login.md").exists());
+
+    Ok(())
+}
+
+#[test]
+fn test_config_exclude_patterns() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = TempDir::new()?;
+    let root = temp_dir.path();
+
+    let config_content = r#"
+server_port = 3000
+exclude_patterns = ["secret_data", "ignored.rs"]
+"#;
+    fs::write(root.join("amdb.toml"), config_content)?;
+
+    fs::create_dir(root.join("secret_data"))?;
+    fs::write(root.join("secret_data/api_keys.rs"), "fn get_stripe_key() {}")?;
+    fs::write(root.join("ignored.rs"), "fn ignored_func() {}")?;
+    fs::write(root.join("public.rs"), "fn public_login() {}")?;
+
+    let mut cmd_init = cargo_bin_cmd!("amdb");
+    cmd_init
+        .current_dir(root)
+        .arg("init")
+        .arg(".")
+        .assert()
+        .success();
+
+    let mut cmd_gen = cargo_bin_cmd!("amdb");
+    cmd_gen
+        .current_dir(root)
+        .arg("generate")
+        .assert()
+        .success();
+
+    let context_md = root.join(".amdb/context.md");
+    let content = fs::read_to_string(context_md)?;
+
+    assert!(content.contains("public_login"));
+    assert!(!content.contains("get_stripe_key"));
+    assert!(!content.contains("ignored_func"));
 
     Ok(())
 }

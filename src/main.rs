@@ -6,6 +6,7 @@ mod core;
 mod daemon;
 mod db;
 
+use crate::core::config::AppConfig;
 use crate::core::generator::ContextGenerator;
 use crate::core::indexer::Indexer;
 use crate::daemon::watcher::FileWatcher;
@@ -55,10 +56,13 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
+    let config = AppConfig::load();
+
     match cli.command {
         Commands::Init { path } => {
             info!("Initializing amdb in: {}", path);
-            let res = tokio::task::spawn_blocking(move || Indexer::scan_project(&path)).await?;
+            let config_clone = config.clone();
+            let res = tokio::task::spawn_blocking(move || Indexer::scan_project(&path, &config_clone)).await?;
 
             if let Err(e) = res {
                 error!("Init failed: {}", e);
@@ -66,7 +70,7 @@ async fn main() -> anyhow::Result<()> {
         }
         Commands::Daemon { path } => {
             info!("Starting daemon watcher on: {}", path);
-            if let Err(e) = FileWatcher::watch(&path).await {
+            if let Err(e) = FileWatcher::watch(&path, &config).await {
                 error!("Watcher error: {}", e);
             }
         }

@@ -1,3 +1,4 @@
+use crate::core::config::AppConfig;
 use crate::core::indexer::Indexer;
 use crate::core::languages::SupportedLanguage;
 use notify::event::{ModifyKind, RenameMode};
@@ -9,7 +10,7 @@ use tracing::{debug, error, info};
 pub struct FileWatcher;
 
 impl FileWatcher {
-    pub async fn watch(root: &str) -> anyhow::Result<()> {
+    pub async fn watch(root: &str, config: &AppConfig) -> anyhow::Result<()> {
         let (tx, rx) = channel();
         let mut watcher = RecommendedWatcher::new(tx, Config::default())?;
 
@@ -29,13 +30,16 @@ impl FileWatcher {
 
                             debug!("Rename detected: {} -> {}", old_path, new_path);
 
-                            if !old_path.contains(".database") && !old_path.contains(".amdb") {
+                            let is_old_excluded = config.exclude_patterns.iter().any(|p| old_path.contains(p));
+                            let is_new_excluded = config.exclude_patterns.iter().any(|p| new_path.contains(p));
+
+                            if !is_old_excluded {
                                 if let Err(e) = Indexer::remove_file(root, &old_path) {
                                     error!("Remove error: {}", e);
                                 }
                             }
 
-                            if !new_path.contains(".database") && !new_path.contains(".amdb") {
+                            if !is_new_excluded {
                                 if let Err(e) = Indexer::update_file(root, &new_path) {
                                     error!("Update error: {}", e);
                                 }
@@ -47,7 +51,7 @@ impl FileWatcher {
                     for path in event.paths {
                         let path_str = path.to_string_lossy().to_string();
 
-                        if path_str.contains(".database") || path_str.contains(".amdb") {
+                        if config.exclude_patterns.iter().any(|p| path_str.contains(p)) {
                             continue;
                         }
 
