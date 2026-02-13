@@ -1,16 +1,17 @@
 use anyhow::Result;
+use console::style;
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
-use console::style;
-use crate::db::ContextDb;
-use crate::core::vector_store::VectorStore;
 use crate::core::embedding::EmbeddingEngine;
+use crate::core::vector_store::VectorStore;
+use crate::db::ContextDb;
 
 pub struct ContextGenerator;
 
 impl ContextGenerator {
-    pub async fn generate(focus_query: Option<String>) -> Result<()> {
+    pub async fn generate(focus_query: Option<String>, depth: u8) -> Result<()> {
         let db_dir = Path::new(".database");
         let output_dir = Path::new(".amdb");
 
@@ -24,43 +25,98 @@ impl ContextGenerator {
         }
 
         let db = ContextDb::open(db_dir)?;
-        let target_files: Vec<String>;
+        let mut target_files: Vec<String>;
         let output_filename: String;
 
-        if let Some(query) = focus_query {
+        let all_edges = db.get_all_relationships()?;
+        let all_files = db.get_all_files()?;
+        let mut symbol_to_files: HashMap<String, Vec<String>> = HashMap::new();
+
+        for file in &all_files {
+            if let Ok(symbols) = db.get_symbols(file) {
+                for sym in symbols {
+                    symbol_to_files.entry(sym.name).or_default().push(file.clone());
+                }
+            }
+        }
+
+        if let Some(query) = &focus_query {
             let safe_name = query.replace(" ", "-").replace("/", "-").to_lowercase();
             output_filename = format!("{}.md", safe_name);
 
-            println!("{}", style(format!("Filtering context for: '{}'...", query)).cyan());
+            println!("{}", style(format!("Filtering context for: '{}' with depth {}...", query, depth)).cyan());
 
-            let vector_path = db_dir.join("vector");
+            let mut paths = Vec::new();
 
-            let store = VectorStore::open(&vector_path)?;
-            let embedder = EmbeddingEngine::new()?;
-            let query_vec = embedder.embed(&query)?;
-            let results = store.search(&query_vec, 10)?;
+            // 1. Exact Match Priority (파일 이름 및 심볼 이름 정확한 일치 확인)
+            for file in &all_files {
+                let path_obj = Path::new(file);
+                let file_name = path_obj.file_name().unwrap_or_default().to_string_lossy();
+                let file_stem = path_obj.file_stem().unwrap_or_default().to_string_lossy();
 
-            println!("DEBUG: Search found {} matches for query '{}'", results.len(), query);
-
-            if results.is_empty() {
-                println!("{}", style("No matches found. Falling back to full context.").yellow());
-                target_files = db.get_all_files()?;
-            } else {
-                let mut paths = Vec::new();
-                for (_, record) in results {
-                    println!("DEBUG: Found relevant file: {}", record.file_path);
-
-                    if !paths.contains(&record.file_path) {
-                        paths.push(record.file_path);
+                if file_name.eq_ignore_ascii_case(query) || file_stem.eq_ignore_ascii_case(query) {
+                    if !paths.contains(file) { paths.push(file.clone()); }
+                } else if let Ok(symbols) = db.get_symbols(file) {
+                    if symbols.iter().any(|s| s.name.eq_ignore_ascii_case(query)) {
+                        if !paths.contains(file) { paths.push(file.clone()); }
                     }
                 }
-                target_files = paths;
             }
-        }
-        else {
+
+            // 2. Vector Search Fallback (정확한 일치가 없을 때만 시맨틱 검색 수행)
+            if paths.is_empty() {
+                let vector_path = db_dir.join("vector");
+                let store = VectorStore::open(&vector_path)?;
+                let embedder = EmbeddingEngine::new()?;
+                let query_vec = embedder.embed(query)?;
+                let results = store.search(&query_vec, 10)?;
+
+                if !results.is_empty() {
+                    let best_dist = results[0].0;
+                    for (dist, record) in results {
+                        // 가장 유사한 결과(best_dist)와 점수 차이가 0.25 이하인 경우만 포함
+                        if dist <= best_dist + 0.25 {
+                            if !paths.contains(&record.file_path) {
+                                paths.push(record.file_path);
+                            }
+                        }
+                    }
+                }
+            }
+
+            if paths.is_empty() {
+                println!("{}", style("No matches found. Falling back to full context.").yellow());
+                target_files = all_files;
+            } else {
+                let mut all_target_files: HashSet<String> = paths.into_iter().collect();
+                let mut current_level_files = all_target_files.clone();
+
+                for _ in 0..depth {
+                    let mut next_level_files = HashSet::new();
+                    for edge in &all_edges {
+                        if let Some(caller_file) = edge.caller.split("::").next() {
+                            if current_level_files.contains(caller_file) {
+                                if let Some(files) = symbol_to_files.get(&edge.callee) {
+                                    for f in files {
+                                        if !all_target_files.contains(f) {
+                                            next_level_files.insert(f.clone());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    all_target_files.extend(next_level_files.clone());
+                    current_level_files = next_level_files;
+                }
+
+                target_files = all_target_files.into_iter().collect();
+                target_files.sort();
+            }
+        } else {
             output_filename = "context.md".to_string();
             println!("{}", style("Generating full project context...").blue());
-            target_files = db.get_all_files()?;
+            target_files = all_files;
         }
 
         let output_path = output_dir.join(&output_filename);
@@ -90,17 +146,43 @@ impl ContextGenerator {
         }
 
         content.push_str("## Dependency Graph\n```mermaid\ngraph TD;\n");
-        let all_edges = db.get_all_relationships()?;
+
+        let target_files_set: HashSet<String> = target_files.iter().cloned().collect();
         let mut edge_count = 0;
+        let is_focus = focus_query.is_some();
 
         for edge in all_edges {
             if edge_count > 100 { break; }
 
-            let caller = edge.caller.replace("::", "_").replace(".", "_");
-            let callee = edge.callee.replace("::", "_").replace(".", "_");
-            if caller != callee {
-                content.push_str(&format!("    {} --> {};\n", caller, callee));
-                edge_count += 1;
+            if let Some(caller_file) = edge.caller.split("::").next() {
+                if is_focus && !target_files_set.contains(caller_file) {
+                    continue;
+                }
+
+                let mut include_edge = true;
+                if is_focus {
+                    if let Some(files) = symbol_to_files.get(&edge.callee) {
+                        let mut callee_in_target = false;
+                        for f in files {
+                            if target_files_set.contains(f) {
+                                callee_in_target = true;
+                                break;
+                            }
+                        }
+                        if !callee_in_target {
+                            include_edge = false;
+                        }
+                    }
+                }
+
+                if include_edge {
+                    let caller = edge.caller.replace("::", "_").replace(".", "_").replace("/", "_").replace("\\", "_");
+                    let callee = edge.callee.replace("::", "_").replace(".", "_").replace("/", "_").replace("\\", "_");
+                    if caller != callee {
+                        content.push_str(&format!("    {} --> {};\n", caller, callee));
+                        edge_count += 1;
+                    }
+                }
             }
         }
         content.push_str("```\n");

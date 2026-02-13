@@ -34,6 +34,9 @@ enum Commands {
     Generate {
         #[arg(short, long)]
         focus: Option<String>,
+
+        #[arg(short, long, default_value_t = 1)]
+        depth: u8,
     },
 }
 
@@ -70,8 +73,8 @@ async fn main() -> anyhow::Result<()> {
                 error!("Watcher error: {}", e);
             }
         }
-        Commands::Generate { focus } => {
-            if let Err(e) = ContextGenerator::generate(focus).await {
+        Commands::Generate { focus, depth } => {
+            if let Err(e) = ContextGenerator::generate(focus, depth).await {
                 error!("Generation error: {}", e);
             }
         }

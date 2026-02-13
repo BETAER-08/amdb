@@ -168,3 +168,60 @@ fn test_config_env_override_integration() -> Result<(), Box<dyn std::error::Erro
     assert!(root.join(".custom_env_db").exists());
     Ok(())
 }
+
+#[test]
+fn test_depth_control_integration() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = TempDir::new()?;
+    let root = temp_dir.path();
+
+    let main_rs = root.join("main.rs");
+    fs::write(&main_rs, "fn main() { func_a(); }")?;
+
+    let a_rs = root.join("a.rs");
+    fs::write(&a_rs, "fn func_a() { func_b(); }")?;
+
+    let b_rs = root.join("b.rs");
+    fs::write(&b_rs, "fn func_b() {}")?;
+
+    let mut cmd_init = cargo_bin_cmd!("amdb");
+    cmd_init.current_dir(root).arg("init").arg(".").assert().success();
+
+    let mut cmd_depth0 = cargo_bin_cmd!("amdb");
+    cmd_depth0.current_dir(root)
+        .arg("generate")
+        .arg("--focus").arg("main")
+        .arg("--depth").arg("0")
+        .assert().success();
+
+    let context_md = root.join(".amdb/main.md");
+    let content_0 = fs::read_to_string(&context_md)?;
+    assert!(content_0.contains("main.rs"));
+    assert!(!content_0.contains("a.rs"));
+    assert!(!content_0.contains("b.rs"));
+
+    let mut cmd_depth1 = cargo_bin_cmd!("amdb");
+    cmd_depth1.current_dir(root)
+        .arg("generate")
+        .arg("--focus").arg("main")
+        .arg("--depth").arg("1")
+        .assert().success();
+
+    let content_1 = fs::read_to_string(&context_md)?;
+    assert!(content_1.contains("main.rs"));
+    assert!(content_1.contains("a.rs"));
+    assert!(!content_1.contains("b.rs"));
+
+    let mut cmd_depth2 = cargo_bin_cmd!("amdb");
+    cmd_depth2.current_dir(root)
+        .arg("generate")
+        .arg("--focus").arg("main")
+        .arg("--depth").arg("2")
+        .assert().success();
+
+    let content_2 = fs::read_to_string(&context_md)?;
+    assert!(content_2.contains("main.rs"));
+    assert!(content_2.contains("a.rs"));
+    assert!(content_2.contains("b.rs"));
+
+    Ok(())
+}
