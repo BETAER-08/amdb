@@ -225,3 +225,32 @@ fn test_depth_control_integration() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+#[test]
+fn test_hybrid_search_incoming_edge() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = TempDir::new()?;
+    let root = temp_dir.path();
+
+    let def_rs = root.join("def.rs");
+    fs::write(&def_rs, "fn target_func() {}")?;
+
+    let user_rs = root.join("user.rs");
+    fs::write(&user_rs, "fn main() { target_func(); }")?;
+
+    let mut cmd_init = cargo_bin_cmd!("amdb");
+    cmd_init.current_dir(root).arg("init").arg(".").assert().success();
+
+    let mut cmd_gen = cargo_bin_cmd!("amdb");
+    cmd_gen.current_dir(root)
+        .arg("generate")
+        .arg("--focus").arg("target_func")
+        .arg("--depth").arg("1")
+        .assert().success();
+
+    let context_md = root.join(".amdb/target_func.md");
+    let content = fs::read_to_string(&context_md)?;
+
+    assert!(content.contains("def.rs"));
+    assert!(content.contains("user.rs"));
+
+    Ok(())
+}

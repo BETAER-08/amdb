@@ -48,7 +48,6 @@ impl ContextGenerator {
 
             let mut paths = Vec::new();
 
-            // 1. Exact Match Priority (파일 이름 및 심볼 이름 정확한 일치 확인)
             for file in &all_files {
                 let path_obj = Path::new(file);
                 let file_name = path_obj.file_name().unwrap_or_default().to_string_lossy();
@@ -63,7 +62,6 @@ impl ContextGenerator {
                 }
             }
 
-            // 2. Vector Search Fallback (정확한 일치가 없을 때만 시맨틱 검색 수행)
             if paths.is_empty() {
                 let vector_path = db_dir.join("vector");
                 let store = VectorStore::open(&vector_path)?;
@@ -74,7 +72,6 @@ impl ContextGenerator {
                 if !results.is_empty() {
                     let best_dist = results[0].0;
                     for (dist, record) in results {
-                        // 가장 유사한 결과(best_dist)와 점수 차이가 0.25 이하인 경우만 포함
                         if dist <= best_dist + 0.25 {
                             if !paths.contains(&record.file_path) {
                                 paths.push(record.file_path);
@@ -101,6 +98,14 @@ impl ContextGenerator {
                                         if !all_target_files.contains(f) {
                                             next_level_files.insert(f.clone());
                                         }
+                                    }
+                                }
+                            }
+
+                            if let Some(files) = symbol_to_files.get(&edge.callee) {
+                                if files.iter().any(|f| current_level_files.contains(f)) {
+                                    if !all_target_files.contains(caller_file) {
+                                        next_level_files.insert(caller_file.to_string());
                                     }
                                 }
                             }
