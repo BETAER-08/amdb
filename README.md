@@ -23,18 +23,10 @@ AI coding assistants (Cursor, Windsurf, Claude) are powerful, **but they are bli
 
 ## 📦 Installation
 
-### Option 1: One-line Installer (Recommended)
-You don't need Rust installed. Just run this script to install the latest binary automatically.
-Works on **macOS** (Intel/Apple Silicon) and **Linux** (including WSL).
-
-```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/BETAER-08/amdb/releases/latest/download/amdb-installer.sh | sh
-```
-
-### Option 2: Manual Download
+### Option 1: Manual Download
 Prefer to download the file yourself? Go to the Releases Page and download the version for your OS.
 
-### Option 3: Install via Cargo
+### Option 2: Install via Cargo
 If you have the Rust toolchain installed:
 
 ```bash
