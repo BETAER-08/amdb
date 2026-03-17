@@ -1,0 +1,111 @@
+name: Publish Docker Image
+
+on:
+  # Trigger directly on version tags so github.ref carries the tag context
+  # reliably (avoids the workflow_run ref scoping problem).
+  push:
+    tags:
+      - "v*.*.*"
+  # Keep manual dispatch for emergency re-publishes
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag to publish (e.g. v0.4.0)"
+        required: true
+
+env:
+  REGISTRY_DOCKERHUB: docker.io
+  REGISTRY_GHCR: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      # Required for OIDC JWT (used by provenance attestation)
+      id-token: write
+      # Required to write attestation manifests back to GHCR
+      attestations: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          # Use the manual workflow_dispatch `tag` input when provided,
+          # otherwise fall back to the ref that triggered the workflow.
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      # QEMU is required for cross-compiling to linux/arm64 on an amd64 runner.
+      # Matches the aarch64 targets in your dist-workspace.toml.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # ── Registry logins ──────────────────────────────────────────────────
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY_GHCR }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Image metadata ───────────────────────────────────────────────────
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.REGISTRY_DOCKERHUB }}/${{ env.IMAGE_NAME }}
+            ${{ env.REGISTRY_GHCR }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            # FIX: use the built-in shorthand instead of the broken string literal
+            type=raw,value=latest,enable={{is_default_branch}}
+          # Prevent metadata-action from auto-adding a redundant 'latest' tag
+          # on top of the one we control above.
+          flavor: |
+            latest=false
+
+      # ── Build & push ─────────────────────────────────────────────────────
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          # Build for both architectures your release targets.
+          # Remove linux/arm64 if your CI minutes are constrained — arm64
+          # emulation via QEMU is significantly slower.
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Attach OCI-standard provenance using the OIDC token.
+          # This is what id-token: write is actually for.
+          provenance: true
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ── Attestations (supply-chain security) ─────────────────────────────
+      # Writes a signed SLSA provenance attestation to GHCR.
+      # Requires attestations: write + id-token: write permissions above.
+      # Note: as of v4, this action is a wrapper over actions/attest.
+      # New projects can use actions/attest directly, but this remains valid.
+      - name: Attest GHCR image
+        uses: actions/attest-build-provenance@v4  # latest: v4
+        with:
+          subject-name: ${{ env.REGISTRY_GHCR }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true

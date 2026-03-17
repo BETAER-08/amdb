@@ -33,6 +33,30 @@ If you have the Rust toolchain installed:
 cargo install amdb
 ```
 
+### Option 3: Docker
+You can run `amdb` directly from a Docker container without installing Rust or dependencies.
+
+```bash
+# Pull the image
+docker pull ghcr.io/betaer-08/amdb:latest
+
+# Run amdb (mount your current directory to /data)
+docker run --rm -v $(pwd):/data ghcr.io/betaer-08/amdb init
+docker run --rm -v $(pwd):/data ghcr.io/betaer-08/amdb generate
+```
+
+**Note:** The container runs as a non-root user. If you encounter permission issues with the generated files, you can run the container with your current user ID:
+
+```bash
+docker run --rm -u $(id -u):$(id -g) -v $(pwd):/data ghcr.io/betaer-08/amdb init
+```
+
+**Pro Tip:** To persist the embedding models and avoid re-downloading them on every run, you can mount a volume to the `nonroot` user's cache directory:
+
+```bash
+docker run --rm -v $(pwd):/data -v $(pwd)/.cache:/home/nonroot/.cache ghcr.io/betaer-08/amdb generate
+```
+
 ## 🚀 Quick Start
 
 ### 1. Initialize Project
