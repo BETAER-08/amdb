@@ -67,7 +67,7 @@ impl ContextGenerator {
                 let store = VectorStore::open(&vector_path)?;
                 let embedder = EmbeddingEngine::new()?;
                 let query_vec = embedder.embed(query)?;
-                let results = store.search(&query_vec, 10)?;
+                let results = store.search(&query_vec, 10, None)?;
 
                 if !results.is_empty() {
                     let best_dist = results[0].0;

@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use rayon::prelude::*;
 use std::cmp::Ordering;
 use std::path::Path;
+use std::collections::HashSet;
+use crate::core::graph::DependencyGraph;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VectorRecord {
@@ -78,7 +80,7 @@ impl VectorStore {
         Ok(())
     }
 
-    pub fn search(&self, query_vec: &[f32], limit: usize) -> Result<Vec<(f64, VectorRecord)>> {
+    pub fn search(&self, query_vec: &[f32], limit: usize, graph: Option<&DependencyGraph>) -> Result<Vec<(f64, VectorRecord)>> {
         let mut stmt = self.conn.prepare("SELECT id, file_path, text, vector FROM vectors")?;
 
         let mut rows = stmt.query([])?;
@@ -105,6 +107,46 @@ impl VectorStore {
                 }
             })
             .collect();
+
+        if let Some(g) = graph {
+            evaluated.sort_unstable_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
+
+            let mut top_ids = HashSet::new();
+            let mut top_names = HashSet::new();
+
+            for (i, cand) in evaluated.iter().enumerate() {
+                if i >= 5 { break; }
+                top_ids.insert(cand.record.id.clone());
+                if let Some(name) = cand.record.id.split("::").nth(1) {
+                    top_names.insert(name.to_string());
+                }
+            }
+
+            for cand in evaluated.iter_mut() {
+                let mut boost = 0.0;
+                let id = &cand.record.id;
+
+                if let Some(callees) = g.edges.get(id) {
+                    for callee in callees {
+                        if top_names.contains(callee) {
+                            boost += 0.2;
+                        }
+                    }
+                }
+
+                if let Some(name) = id.split("::").nth(1) {
+                    if let Some(callers) = g.reverse_edges.get(name) {
+                        for caller in callers {
+                            if top_ids.contains(caller) {
+                                boost += 0.2;
+                            }
+                        }
+                    }
+                }
+
+                cand.score += boost;
+            }
+        }
 
         evaluated.sort_unstable_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
         evaluated.truncate(limit);

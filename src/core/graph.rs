@@ -13,6 +13,7 @@ pub struct Node {
 pub struct DependencyGraph {
     pub nodes: HashMap<String, Node>,
     pub edges: HashMap<String, HashSet<String>>,
+    pub reverse_edges: HashMap<String, HashSet<String>>,
 }
 
 impl DependencyGraph {
@@ -20,6 +21,7 @@ impl DependencyGraph {
         Self {
             nodes: HashMap::new(),
             edges: HashMap::new(),
+            reverse_edges: HashMap::new(),
         }
     }
 
@@ -37,9 +39,13 @@ impl DependencyGraph {
     pub fn add_edge(&mut self, file: &str, caller: &str, callee: &str) {
         let key = format!("{}::{}", file, caller);
         self.edges
-            .entry(key)
+            .entry(key.clone())
             .or_default()
             .insert(callee.to_string());
+        self.reverse_edges
+            .entry(callee.to_string())
+            .or_default()
+            .insert(key);
     }
 
     #[allow(dead_code)]
