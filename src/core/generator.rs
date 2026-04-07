@@ -25,9 +25,6 @@ impl ContextGenerator {
         }
 
         let db = ContextDb::open(db_dir)?;
-        let mut target_files: Vec<String>;
-        let output_filename: String;
-
         let all_edges = db.get_all_relationships()?;
         let all_files = db.get_all_files()?;
         let mut symbol_to_files: HashMap<String, Vec<String>> = HashMap::new();
@@ -40,46 +37,16 @@ impl ContextGenerator {
             }
         }
 
+        let target_files: Vec<String>;
+        let output_filename: String;
+
         if let Some(query) = &focus_query {
             let safe_name = query.replace(" ", "-").replace("/", "-").to_lowercase();
             output_filename = format!("{}.md", safe_name);
 
             println!("{}", style(format!("Filtering context for: '{}' with depth {}...", query, depth)).cyan());
 
-            let mut paths = Vec::new();
-
-            for file in &all_files {
-                let path_obj = Path::new(file);
-                let file_name = path_obj.file_name().unwrap_or_default().to_string_lossy();
-                let file_stem = path_obj.file_stem().unwrap_or_default().to_string_lossy();
-
-                if file_name.eq_ignore_ascii_case(query) || file_stem.eq_ignore_ascii_case(query) {
-                    if !paths.contains(file) { paths.push(file.clone()); }
-                } else if let Ok(symbols) = db.get_symbols(file) {
-                    if symbols.iter().any(|s| s.name.eq_ignore_ascii_case(query)) {
-                        if !paths.contains(file) { paths.push(file.clone()); }
-                    }
-                }
-            }
-
-            if paths.is_empty() {
-                let vector_path = db_dir.join("vector");
-                let store = VectorStore::open(&vector_path)?;
-                let embedder = EmbeddingEngine::new()?;
-                let query_vec = embedder.embed(query)?;
-                let results = store.search(&query_vec, 10, None)?;
-
-                if !results.is_empty() {
-                    let best_dist = results[0].0;
-                    for (dist, record) in results {
-                        if dist <= best_dist + 0.25 {
-                            if !paths.contains(&record.file_path) {
-                                paths.push(record.file_path);
-                            }
-                        }
-                    }
-                }
-            }
+            let paths = Self::resolve_focus_targets(db_dir, &all_files, &db, query).await?;
 
             if paths.is_empty() {
                 println!("{}", style("No matches found. Falling back to full context.").yellow());
@@ -98,27 +65,7 @@ impl ContextGenerator {
                         }
                     }
                 }
-
-                let mut all_target_files: HashSet<String> = paths.into_iter().collect();
-                let mut current_level_files = all_target_files.clone();
-
-                for _ in 0..depth {
-                    let mut next_level_files = HashSet::new();
-                    for current_file in &current_level_files {
-                        if let Some(neighbors) = file_graph.get(current_file) {
-                            for neighbor in neighbors {
-                                if !all_target_files.contains(neighbor) {
-                                    next_level_files.insert(neighbor.clone());
-                                }
-                            }
-                        }
-                    }
-                    all_target_files.extend(next_level_files.clone());
-                    current_level_files = next_level_files;
-                }
-
-                target_files = all_target_files.into_iter().collect();
-                target_files.sort();
+                target_files = Self::expand_graph_depth(paths, &file_graph, depth);
             }
         } else {
             output_filename = "context.md".to_string();
@@ -126,14 +73,112 @@ impl ContextGenerator {
             target_files = all_files;
         }
 
+        let mapped_edges: Vec<(&str, &str)> = all_edges.iter().map(|e| (e.caller.as_str(), e.callee.as_str())).collect();
+
+        let content = Self::format_markdown_report(
+            &db,
+            &target_files,
+            &mapped_edges,
+            &symbol_to_files,
+            focus_query.as_deref(),
+            &output_filename,
+        )?;
+
         let output_path = output_dir.join(&output_filename);
+        let mut file = File::create(&output_path)?;
+        file.write_all(content.as_bytes())?;
+
+        println!("{}", style(format!("Generated: {}", output_path.display())).green().bold());
+        Ok(())
+    }
+
+    async fn resolve_focus_targets(
+        db_dir: &Path,
+        all_files: &[String],
+        db: &ContextDb,
+        query: &str,
+    ) -> Result<Vec<String>> {
+        let mut paths = Vec::new();
+
+        for file in all_files {
+            let path_obj = Path::new(file);
+            let file_name = path_obj.file_name().unwrap_or_default().to_string_lossy();
+            let file_stem = path_obj.file_stem().unwrap_or_default().to_string_lossy();
+
+            if file_name.eq_ignore_ascii_case(query) || file_stem.eq_ignore_ascii_case(query) {
+                if !paths.contains(file) { paths.push(file.clone()); }
+            } else if let Ok(symbols) = db.get_symbols(file) {
+                if symbols.iter().any(|s| s.name.eq_ignore_ascii_case(query)) {
+                    if !paths.contains(file) { paths.push(file.clone()); }
+                }
+            }
+        }
+
+        if paths.is_empty() {
+            let vector_path = db_dir.join("vector");
+            let store = VectorStore::open(&vector_path)?;
+            let embedder = EmbeddingEngine::new()?;
+            let query_vec = embedder.embed(query)?;
+            let results = store.search(&query_vec, 10, None)?;
+
+            if !results.is_empty() {
+                let best_dist = results[0].0;
+                for (dist, record) in results {
+                    if dist <= best_dist + 0.25 {
+                        if !paths.contains(&record.file_path) {
+                            paths.push(record.file_path);
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(paths)
+    }
+
+    fn expand_graph_depth(
+        initial_targets: Vec<String>,
+        file_graph: &HashMap<String, HashSet<String>>,
+        depth: u8,
+    ) -> Vec<String> {
+        let mut all_target_files: HashSet<String> = initial_targets.into_iter().collect();
+        let mut current_level_files = all_target_files.clone();
+
+        for _ in 0..depth {
+            let mut next_level_files = HashSet::new();
+            for current_file in &current_level_files {
+                if let Some(neighbors) = file_graph.get(current_file) {
+                    for neighbor in neighbors {
+                        if !all_target_files.contains(neighbor) {
+                            next_level_files.insert(neighbor.clone());
+                        }
+                    }
+                }
+            }
+            all_target_files.extend(next_level_files.clone());
+            current_level_files = next_level_files;
+        }
+
+        let mut target_files: Vec<String> = all_target_files.into_iter().collect();
+        target_files.sort();
+        target_files
+    }
+
+    fn format_markdown_report(
+        db: &ContextDb,
+        target_files: &[String],
+        edges: &[(&str, &str)],
+        symbol_to_files: &HashMap<String, Vec<String>>,
+        focus_query: Option<&str>,
+        output_filename: &str,
+    ) -> Result<String> {
         let mut content = String::new();
 
         content.push_str(&format!("# AI Context: {}\n\n", output_filename));
         content.push_str("> Auto-generated by amdb.\n\n");
 
         content.push_str("## File Summaries\n\n");
-        for file_path in &target_files {
+        for file_path in target_files {
             let symbols = db.get_symbols(file_path)?;
             if symbols.is_empty() { continue; }
 
@@ -154,21 +199,22 @@ impl ContextGenerator {
 
         content.push_str("## Dependency Graph\n```mermaid\ngraph TD;\n");
 
-        let target_files_set: HashSet<String> = target_files.iter().cloned().collect();
+        let target_files_set: HashSet<&String> = target_files.iter().collect();
         let mut edge_count = 0;
         let is_focus = focus_query.is_some();
 
-        for edge in all_edges {
+        for (caller, callee) in edges {
             if edge_count > 100 { break; }
 
-            if let Some(caller_file) = edge.caller.split("::").next() {
-                if is_focus && !target_files_set.contains(caller_file) {
+            if let Some(caller_file) = caller.split("::").next() {
+                let caller_file_str = caller_file.to_string();
+                if is_focus && !target_files_set.contains(&caller_file_str) {
                     continue;
                 }
 
                 let mut include_edge = true;
                 if is_focus {
-                    if let Some(files) = symbol_to_files.get(&edge.callee) {
+                    if let Some(files) = symbol_to_files.get(*callee) {
                         let mut callee_in_target = false;
                         for f in files {
                             if target_files_set.contains(f) {
@@ -183,10 +229,10 @@ impl ContextGenerator {
                 }
 
                 if include_edge {
-                    let caller = edge.caller.replace("::", "_").replace(".", "_").replace("/", "_").replace("\\", "_");
-                    let callee = edge.callee.replace("::", "_").replace(".", "_").replace("/", "_").replace("\\", "_");
-                    if caller != callee {
-                        content.push_str(&format!("    {} --> {};\n", caller, callee));
+                    let safe_caller = caller.replace("::", "_").replace(".", "_").replace("/", "_").replace("\\", "_");
+                    let safe_callee = callee.replace("::", "_").replace(".", "_").replace("/", "_").replace("\\", "_");
+                    if safe_caller != safe_callee {
+                        content.push_str(&format!("    {} --> {};\n", safe_caller, safe_callee));
                         edge_count += 1;
                     }
                 }
@@ -194,10 +240,6 @@ impl ContextGenerator {
         }
         content.push_str("```\n");
 
-        let mut file = File::create(&output_path)?;
-        file.write_all(content.as_bytes())?;
-
-        println!("{}", style(format!("Generated: {}", output_path.display())).green().bold());
-        Ok(())
+        Ok(content)
     }
 }
