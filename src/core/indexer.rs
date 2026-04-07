@@ -9,7 +9,7 @@ use anyhow::Result;
 use ignore::WalkBuilder;
 use rayon::prelude::*;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
@@ -21,6 +21,91 @@ struct FileIndexData {
     graph: DependencyGraph,
     warnings: Vec<CodeWarning>,
     vectors: Vec<(String, String, Vec<f32>)>,
+}
+
+pub struct IndexWorker {
+    db: ContextDb,
+    vector_store: VectorStore,
+    embedder: EmbeddingEngine,
+    vector_path: PathBuf,
+}
+
+impl IndexWorker {
+    pub fn new(root: &str) -> Result<Self> {
+        let config = Config::load(root);
+        let db_dir = Path::new(root).join(&config.db_path);
+        let vector_path = db_dir.join("vector");
+
+        let db = ContextDb::open(&db_dir)?;
+        let vector_store = VectorStore::open(&vector_path)?;
+        let embedder = EmbeddingEngine::new()?;
+
+        Ok(Self {
+            db,
+            vector_store,
+            embedder,
+            vector_path,
+        })
+    }
+
+    pub fn update_file(&mut self, path: &str) -> Result<()> {
+        self.vector_store.remove_by_file(path)?;
+
+        let path_obj = Path::new(path);
+        if path_obj.exists() {
+            if let Some(lang) = SupportedLanguage::from_path(path_obj) {
+                match CodeParser::new(lang) {
+                    Ok(mut parser) => {
+                        match fs::read_to_string(path_obj) {
+                            Ok(code) => {
+                                match parser.parse(path, &code) {
+                                    Ok((symbols, graph, _, warnings)) => {
+                                        self.db.save_symbols(path, &symbols)?;
+                                        self.db.save_relationships(path, &graph)?;
+                                        self.db.save_warnings(path, &warnings)?;
+
+                                        for symbol in symbols {
+                                            let text = format!(
+                                                "File: {}\nName: {}\nKind: {}\nDoc: {}",
+                                                path,
+                                                symbol.name,
+                                                symbol.kind,
+                                                symbol.docstring.clone().unwrap_or_default()
+                                            );
+
+                                            match self.embedder.embed(&text) {
+                                                Ok(embedding) => {
+                                                    let id = format!("{}::{}", path, symbol.name);
+                                                    if let Err(e) = self.vector_store.add(path.to_string(), id, text, embedding) {
+                                                        error!("Failed to add vector for {}: {}", path, e);
+                                                    }
+                                                }
+                                                Err(e) => warn!("Failed to generate embedding for {}::{}: {}", path, symbol.name, e),
+                                            }
+                                        }
+                                        debug!("Successfully updated index for: {}", path);
+                                    }
+                                    Err(e) => warn!("Failed to parse update for {}: {}", path, e),
+                                }
+                            }
+                            Err(e) => warn!("Failed to read file {}: {}", path, e),
+                        }
+                    }
+                    Err(e) => warn!("Failed to initialize parser for {}: {}", path, e),
+                }
+            }
+        }
+
+        self.vector_store.save(&self.vector_path)?;
+        Ok(())
+    }
+
+    pub fn remove_file(&mut self, path: &str) -> Result<()> {
+        self.db.remove_file_data(path)?;
+        self.vector_store.remove_by_file(path)?;
+        self.vector_store.save(&self.vector_path)?;
+        Ok(())
+    }
 }
 
 impl Indexer {
@@ -155,83 +240,12 @@ impl Indexer {
     }
 
     pub fn update_file(root: &str, path: &str) -> Result<()> {
-        let config = Config::load(root);
-        let db_dir = Path::new(root).join(&config.db_path);
-        let vector_path = db_dir.join("vector");
-
-        let mut db = ContextDb::open(&db_dir)?;
-        let mut vector_store = VectorStore::open(&vector_path)?;
-        let embedder = EmbeddingEngine::new()?;
-
-        vector_store.remove_by_file(path)?;
-
-        let path_obj = Path::new(path);
-        if path_obj.exists() {
-            if let Some(lang) = SupportedLanguage::from_path(path_obj) {
-                match CodeParser::new(lang) {
-                    Ok(mut parser) => {
-                        match fs::read_to_string(path_obj) {
-                            Ok(code) => {
-                                match parser.parse(path, &code) {
-                                    Ok((symbols, graph, _, warnings)) => {
-                                        db.save_symbols(path, &symbols)?;
-                                        db.save_relationships(path, &graph)?;
-                                        db.save_warnings(path, &warnings)?;
-
-                                        for symbol in symbols {
-                                            let text = format!(
-                                                "File: {}\nName: {}\nKind: {}\nDoc: {}",
-                                                path,
-                                                symbol.name,
-                                                symbol.kind,
-                                                symbol.docstring.clone().unwrap_or_default()
-                                            );
-
-                                            match embedder.embed(&text) {
-                                                Ok(embedding) => {
-                                                    let id = format!("{}::{}", path, symbol.name);
-                                                    if let Err(e) = vector_store.add(path.to_string(), id, text, embedding) {
-                                                        error!("Failed to add vector for {}: {}", path, e);
-                                                    }
-                                                }
-                                                Err(e) => warn!("Failed to generate embedding for {}::{}: {}", path, symbol.name, e),
-                                            }
-                                        }
-                                        debug!("Successfully updated index for: {}", path);
-                                    }
-                                    Err(e) => warn!("Failed to parse update for {}: {}", path, e),
-                                }
-                            }
-                            Err(e) => warn!("Failed to read file {}: {}", path, e),
-                        }
-                    }
-                    Err(e) => warn!("Failed to initialize parser for {}: {}", path, e),
-                }
-            } else {
-                debug!("Skipping update for unsupported language: {}", path);
-            }
-        } else {
-            debug!("File does not exist, skipped update: {}", path);
-        }
-
-        vector_store.save(&vector_path)?;
-        info!("Updated index for: {}", path);
-        Ok(())
+        let mut worker = IndexWorker::new(root)?;
+        worker.update_file(path)
     }
 
     pub fn remove_file(root: &str, path: &str) -> Result<()> {
-        let config = Config::load(root);
-        let db_dir = Path::new(root).join(&config.db_path);
-        let vector_path = db_dir.join("vector");
-
-        let mut db = ContextDb::open(&db_dir)?;
-        let mut vector_store = VectorStore::open(&vector_path)?;
-
-        db.remove_file_data(path)?;
-        vector_store.remove_by_file(path)?;
-
-        vector_store.save(&vector_path)?;
-        info!("Removed index for: {}", path);
-        Ok(())
+        let mut worker = IndexWorker::new(root)?;
+        worker.remove_file(path)
     }
 }
