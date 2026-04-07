@@ -65,17 +65,20 @@ async fn main() -> anyhow::Result<()> {
 
             if let Err(e) = res {
                 error!("Init failed: {}", e);
+                std::process::exit(1);
             }
         }
         Commands::Daemon { path } => {
             info!("Starting daemon watcher on: {}", path);
             if let Err(e) = FileWatcher::watch(&path).await {
                 error!("Watcher error: {}", e);
+                std::process::exit(1);
             }
         }
         Commands::Generate { focus, depth } => {
             if let Err(e) = ContextGenerator::generate(focus, depth).await {
                 error!("Generation error: {}", e);
+                std::process::exit(1);
             }
         }
     }

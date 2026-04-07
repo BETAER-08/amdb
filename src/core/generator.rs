@@ -20,8 +20,8 @@ impl ContextGenerator {
         }
 
         if !db_dir.exists() {
-            println!("{}", style("Error: Database not found. Run 'amdb init' first.").red());
-            return Ok(());
+            eprintln!("{}", style("Error: Database not found. Run 'amdb init' first.").red());
+            std::process::exit(1);
         }
 
         let db = ContextDb::open(db_dir)?;
