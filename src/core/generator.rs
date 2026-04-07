@@ -85,28 +85,30 @@ impl ContextGenerator {
                 println!("{}", style("No matches found. Falling back to full context.").yellow());
                 target_files = all_files;
             } else {
+                let mut file_graph: HashMap<String, HashSet<String>> = HashMap::new();
+                for edge in &all_edges {
+                    if let Some(caller_file) = edge.caller.split("::").next() {
+                        if let Some(callee_files) = symbol_to_files.get(&edge.callee) {
+                            for callee_file in callee_files {
+                                if caller_file != callee_file {
+                                    file_graph.entry(caller_file.to_string()).or_default().insert(callee_file.clone());
+                                    file_graph.entry(callee_file.clone()).or_default().insert(caller_file.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+
                 let mut all_target_files: HashSet<String> = paths.into_iter().collect();
                 let mut current_level_files = all_target_files.clone();
 
                 for _ in 0..depth {
                     let mut next_level_files = HashSet::new();
-                    for edge in &all_edges {
-                        if let Some(caller_file) = edge.caller.split("::").next() {
-                            if current_level_files.contains(caller_file) {
-                                if let Some(files) = symbol_to_files.get(&edge.callee) {
-                                    for f in files {
-                                        if !all_target_files.contains(f) {
-                                            next_level_files.insert(f.clone());
-                                        }
-                                    }
-                                }
-                            }
-
-                            if let Some(files) = symbol_to_files.get(&edge.callee) {
-                                if files.iter().any(|f| current_level_files.contains(f)) {
-                                    if !all_target_files.contains(caller_file) {
-                                        next_level_files.insert(caller_file.to_string());
-                                    }
+                    for current_file in &current_level_files {
+                        if let Some(neighbors) = file_graph.get(current_file) {
+                            for neighbor in neighbors {
+                                if !all_target_files.contains(neighbor) {
+                                    next_level_files.insert(neighbor.clone());
                                 }
                             }
                         }
