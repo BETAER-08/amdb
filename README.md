@@ -32,6 +32,20 @@ If you have the Rust toolchain installed:
 ```bash
 cargo install amdb
 ```
+### Option 3: Run via Docker (No Rust required)
+
+You can run `amdb` instantly without setting up a Rust environment by using the official Docker image. This is highly recommended for CI/CD pipelines or non-Rust setups.
+
+```bash
+# Pull the latest image from GitHub Container Registry
+docker pull ghcr.io/OWNER/amdb:latest
+
+# Initialize the database (mounting the current directory to /app)
+docker run --rm -v $(pwd):/app ghcr.io/OWNER/amdb:latest init .
+
+# Generate context
+docker run --rm -v $(pwd):/app ghcr.io/OWNER/amdb:latest generate --focus main
+```
 
 ## 🚀 Quick Start
 
