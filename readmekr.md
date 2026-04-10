@@ -23,24 +23,29 @@ AI 코딩 어시스턴트(Cursor, Windsurf, Claude)는 강력하지만, **볼 �
 
 ## 📦 설치 방법
 
-### 옵션 1: 원라인 설치 프로그램 (권장)
-Rust를 설치할 필요가 없습니다. 이 스크립트를 실행하면 최신 바이너리가 자동으로 설치됩니다.
-**macOS** (Intel/Apple Silicon)와 **Linux** (WSL 포함)에서 작동합니다.
-
-```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/BETAER-08/amdb/releases/latest/download/amdb-installer.sh | sh
-```
-
-### 옵션 2: 수동 다운로드
+### 옵션 1: 수동 다운로드
 직접 파일을 다운로드 받고 싶다면 릴리스 페이지로 이동하여 운영 체제에 맞는 버전을 다운로드하세요.
 
-### 옵션 3: Cargo를 통한 설치
+### 옵션 2: Cargo를 통한 설치
 Rust 툴체인이 설치되어 있다면:
 
 ```bash
 cargo install amdb
 ```
+### Option 3: Docker를 이용한 실행 (Rust 설치 불필요)
 
+Rust 개발 환경을 구축하지 않고도 공식 Docker 이미지를 통해 `amdb`를 즉시 실행할 수 있습니다. CI/CD 파이프라인이나 비-Rust 환경에 적극 권장합니다.
+
+```bash
+# GitHub Container Registry에서 최신 이미지 다운로드
+docker pull ghcr.io/OWNER/amdb:latest
+
+# 데이터베이스 초기화 (현재 호스트 디렉토리를 컨테이너의 /app에 마운트)
+docker run --rm -v $(pwd):/app ghcr.io/OWNER/amdb:latest init .
+
+# 컨텍스트 생성
+docker run --rm -v $(pwd):/app ghcr.io/OWNER/amdb:latest generate --focus main
+```
 ## 🚀 빠른 시작
 
 ### 1. 프로젝트 초기화
