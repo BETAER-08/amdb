@@ -109,8 +109,10 @@ impl ContextGenerator {
             if file_name.eq_ignore_ascii_case(query) || file_stem.eq_ignore_ascii_case(query) {
                 if !paths.contains(file) { paths.push(file.clone()); }
             } else if let Ok(symbols) = db.get_symbols(file) {
-                if symbols.iter().any(|s| s.name.eq_ignore_ascii_case(query)) {
-                    if !paths.contains(file) { paths.push(file.clone()); }
+                if symbols.iter().any(|s| s.name.eq_ignore_ascii_case(query))
+                    && !paths.contains(file)
+                {
+                    paths.push(file.clone());
                 }
             }
         }
@@ -124,10 +126,8 @@ impl ContextGenerator {
             if !results.is_empty() {
                 let best_dist = results[0].0;
                 for (dist, record) in results {
-                    if dist <= best_dist + 0.25 {
-                        if !paths.contains(&record.file_path) {
-                            paths.push(record.file_path);
-                        }
+                    if dist <= best_dist + 0.25 && !paths.contains(&record.file_path) {
+                        paths.push(record.file_path);
                     }
                 }
             }

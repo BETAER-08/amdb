@@ -53,6 +53,13 @@ pub struct CodeRoute {
     pub handler: Option<String>,
 }
 
+pub type ParseResult = (
+    Vec<CodeSymbol>,
+    DependencyGraph,
+    Vec<CodeRoute>,
+    Vec<CodeWarning>,
+);
+
 pub struct CodeParser {
     parser: Parser,
     language: SupportedLanguage,
@@ -69,16 +76,7 @@ impl CodeParser {
         })
     }
 
-    pub fn parse(
-        &mut self,
-        file_path: &str,
-        code: &str,
-    ) -> Result<(
-        Vec<CodeSymbol>,
-        DependencyGraph,
-        Vec<CodeRoute>,
-        Vec<CodeWarning>,
-    )> {
+    pub fn parse(&mut self, file_path: &str, code: &str) -> Result<ParseResult> {
         let tree = self
             .parser
             .parse(code, None)

@@ -226,15 +226,12 @@ fn test_depth_control_integration() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 #[test]
-fn test_hybrid_search_incoming_edge() -> Result<(), Box<dyn std::error::Error>> {
+fn test_directional_graph_excludes_callers() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = TempDir::new()?;
     let root = temp_dir.path();
 
-    let def_rs = root.join("def.rs");
-    fs::write(&def_rs, "fn target_func() {}")?;
-
-    let user_rs = root.join("user.rs");
-    fs::write(&user_rs, "fn main() { target_func(); }")?;
+    std::fs::write(root.join("def.rs"), "fn target_func() {}")?;
+    std::fs::write(root.join("user.rs"), "fn caller() { target_func(); }")?;
 
     let mut cmd_init = cargo_bin_cmd!("amdb");
     cmd_init.current_dir(root).arg("init").arg(".").assert().success();
@@ -246,9 +243,7 @@ fn test_hybrid_search_incoming_edge() -> Result<(), Box<dyn std::error::Error>> 
         .arg("--depth").arg("1")
         .assert().success();
 
-    let context_md = root.join(".amdb/target_func.md");
-    let content = fs::read_to_string(&context_md)?;
-
+    let content = std::fs::read_to_string(root.join(".amdb/target_func.md"))?;
     assert!(content.contains("def.rs"));
     assert!(!content.contains("user.rs"));
 
