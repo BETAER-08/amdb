@@ -46,7 +46,8 @@ impl ContextGenerator {
 
             println!("{}", style(format!("Filtering context for: '{}' with depth {}...", query, depth)).cyan());
 
-            let paths = Self::resolve_focus_targets(db_dir, &all_files, &db, query).await?;
+            let embedder = EmbeddingEngine::new()?;
+            let paths = Self::resolve_focus_targets(db_dir, &all_files, &db, query, &embedder).await?;
 
             if paths.is_empty() {
                 println!("{}", style("No matches found. Falling back to full context.").yellow());
@@ -59,7 +60,6 @@ impl ContextGenerator {
                             for callee_file in callee_files {
                                 if caller_file != callee_file {
                                     file_graph.entry(caller_file.to_string()).or_default().insert(callee_file.clone());
-                                    file_graph.entry(callee_file.clone()).or_default().insert(caller_file.to_string());
                                 }
                             }
                         }
@@ -97,6 +97,7 @@ impl ContextGenerator {
         all_files: &[String],
         db: &ContextDb,
         query: &str,
+        embedder: &EmbeddingEngine,
     ) -> Result<Vec<String>> {
         let mut paths = Vec::new();
 
@@ -117,7 +118,6 @@ impl ContextGenerator {
         if paths.is_empty() {
             let vector_path = db_dir.join("vector");
             let store = VectorStore::open(&vector_path)?;
-            let embedder = EmbeddingEngine::new()?;
             let query_vec = embedder.embed(query)?;
             let results = store.search(&query_vec, 10, None)?;
 
@@ -193,6 +193,11 @@ impl ContextGenerator {
                     content.push_str(&format!(": {}", summary));
                 }
                 content.push('\n');
+                if let Some(sig) = &symbol.signature {
+                    if !sig.is_empty() {
+                        content.push_str(&format!("  - `{}`\n", sig));
+                    }
+                }
             }
             content.push('\n');
         }
@@ -200,41 +205,46 @@ impl ContextGenerator {
         content.push_str("## Dependency Graph\n```mermaid\ngraph TD;\n");
 
         let target_files_set: HashSet<&String> = target_files.iter().collect();
-        let mut edge_count = 0;
         let is_focus = focus_query.is_some();
 
-        for (caller, callee) in edges {
-            if edge_count > 100 { break; }
+        let relevant_edges: Vec<(&str, &str)> = edges
+            .iter()
+            .filter(|(caller, _)| {
+                caller.split("::").next()
+                    .map(|f| target_files_set.contains(&f.to_string()))
+                    .unwrap_or(false)
+            })
+            .copied()
+            .collect();
 
-            if let Some(caller_file) = caller.split("::").next() {
-                let caller_file_str = caller_file.to_string();
-                if is_focus && !target_files_set.contains(&caller_file_str) {
-                    continue;
-                }
+        let display_edges = if relevant_edges.len() > 100 {
+            &relevant_edges[..100]
+        } else {
+            &relevant_edges[..]
+        };
 
-                let mut include_edge = true;
-                if is_focus {
-                    if let Some(files) = symbol_to_files.get(*callee) {
-                        let mut callee_in_target = false;
-                        for f in files {
-                            if target_files_set.contains(f) {
-                                callee_in_target = true;
-                                break;
-                            }
-                        }
-                        if !callee_in_target {
-                            include_edge = false;
+        for (caller, callee) in display_edges {
+            let mut include_edge = true;
+            if is_focus {
+                if let Some(files) = symbol_to_files.get(*callee) {
+                    let mut callee_in_target = false;
+                    for f in files {
+                        if target_files_set.contains(f) {
+                            callee_in_target = true;
+                            break;
                         }
                     }
-                }
-
-                if include_edge {
-                    let safe_caller = caller.replace("::", "_").replace(".", "_").replace("/", "_").replace("\\", "_");
-                    let safe_callee = callee.replace("::", "_").replace(".", "_").replace("/", "_").replace("\\", "_");
-                    if safe_caller != safe_callee {
-                        content.push_str(&format!("    {} --> {};\n", safe_caller, safe_callee));
-                        edge_count += 1;
+                    if !callee_in_target {
+                        include_edge = false;
                     }
+                }
+            }
+
+            if include_edge {
+                let safe_caller = caller.replace("::", "_").replace(".", "_").replace("/", "_").replace("\\", "_");
+                let safe_callee = callee.replace("::", "_").replace(".", "_").replace("/", "_").replace("\\", "_");
+                if safe_caller != safe_callee {
+                    content.push_str(&format!("    {} --> {};\n", safe_caller, safe_callee));
                 }
             }
         }

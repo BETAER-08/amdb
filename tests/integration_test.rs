@@ -250,7 +250,70 @@ fn test_hybrid_search_incoming_edge() -> Result<(), Box<dyn std::error::Error>> 
     let content = fs::read_to_string(&context_md)?;
 
     assert!(content.contains("def.rs"));
-    assert!(content.contains("user.rs"));
+    assert!(!content.contains("user.rs"));
+
+    Ok(())
+}
+
+#[test]
+fn test_symbol_fields_persisted() -> Result<(), Box<dyn std::error::Error>> {
+    use tempfile::TempDir;
+    let temp_dir = TempDir::new()?;
+    let root = temp_dir.path();
+
+    let src = root.join("lib.rs");
+    std::fs::write(&src, "pub fn public_func(x: i32) -> i32 { x }")?;
+
+    let mut cmd_init = cargo_bin_cmd!("amdb");
+    cmd_init.current_dir(root).arg("init").arg(".").assert().success();
+
+    let mut cmd_gen = cargo_bin_cmd!("amdb");
+    cmd_gen.current_dir(root).arg("generate").assert().success();
+
+    let content = std::fs::read_to_string(root.join(".amdb/context.md"))?;
+    assert!(content.contains("public_func"));
+
+    Ok(())
+}
+
+#[test]
+fn test_vector_store_save_no_panic() -> Result<(), Box<dyn std::error::Error>> {
+    use tempfile::TempDir;
+    let temp_dir = TempDir::new()?;
+    let root = temp_dir.path();
+
+    let src = root.join("main.rs");
+    std::fs::write(&src, "fn main() {}")?;
+
+    let mut cmd = cargo_bin_cmd!("amdb");
+    cmd.current_dir(root).arg("init").arg(".").assert().success();
+
+    Ok(())
+}
+
+#[test]
+fn test_depth_directional_no_reverse() -> Result<(), Box<dyn std::error::Error>> {
+    use tempfile::TempDir;
+    let temp_dir = TempDir::new()?;
+    let root = temp_dir.path();
+
+    std::fs::write(root.join("caller.rs"), "fn entry() { target(); }")?;
+    std::fs::write(root.join("target.rs"), "fn target() {}")?;
+    std::fs::write(root.join("unrelated.rs"), "fn unrelated() { entry(); }")?;
+
+    let mut cmd_init = cargo_bin_cmd!("amdb");
+    cmd_init.current_dir(root).arg("init").arg(".").assert().success();
+
+    let mut cmd_gen = cargo_bin_cmd!("amdb");
+    cmd_gen.current_dir(root)
+        .arg("generate")
+        .arg("--focus").arg("target")
+        .arg("--depth").arg("0")
+        .assert().success();
+
+    let content = std::fs::read_to_string(root.join(".amdb/target.md"))?;
+    assert!(content.contains("target.rs"));
+    assert!(!content.contains("unrelated.rs"));
 
     Ok(())
 }

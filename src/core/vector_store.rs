@@ -38,6 +38,10 @@ impl VectorStore {
             )",
             [],
         )?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_vectors_file_path ON vectors (file_path)",
+            [],
+        )?;
         conn.execute_batch(
             "PRAGMA journal_mode = WAL;
              PRAGMA synchronous = NORMAL;",
@@ -155,6 +159,7 @@ impl VectorStore {
     }
 
     pub fn save(&self, _path: &Path) -> Result<()> {
+        self.conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?;
         Ok(())
     }
 }
