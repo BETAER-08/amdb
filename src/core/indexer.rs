@@ -49,50 +49,51 @@ impl IndexWorker {
     }
 
     pub fn update_file(&mut self, path: &str) -> Result<()> {
+        use anyhow::Context;
+
         self.vector_store.remove_by_file(path)?;
 
         let path_obj = Path::new(path);
-        if path_obj.exists() {
-            if let Some(lang) = SupportedLanguage::from_path(path_obj) {
-                match CodeParser::new(lang) {
-                    Ok(mut parser) => {
-                        match fs::read_to_string(path_obj) {
-                            Ok(code) => {
-                                match parser.parse(path, &code) {
-                                    Ok((symbols, graph, _, warnings)) => {
-                                        self.db.save_symbols(path, &symbols)?;
-                                        self.db.save_relationships(path, &graph)?;
-                                        self.db.save_warnings(path, &warnings)?;
+        if !path_obj.exists() {
+            return Ok(());
+        }
 
-                                        for symbol in symbols {
-                                            let text = format!(
-                                                "File: {}\nName: {}\nKind: {}\nDoc: {}",
-                                                path,
-                                                symbol.name,
-                                                symbol.kind,
-                                                symbol.docstring.clone().unwrap_or_default()
-                                            );
+        let lang = match SupportedLanguage::from_path(path_obj) {
+            Some(l) => l,
+            None => return Ok(()),
+        };
 
-                                            match self.embedder.embed(&text) {
-                                                Ok(embedding) => {
-                                                    let id = format!("{}::{}", path, symbol.name);
-                                                    if let Err(e) = self.vector_store.add(path.to_string(), id, text, embedding) {
-                                                        error!("Failed to add vector for {}: {}", path, e);
-                                                    }
-                                                }
-                                                Err(e) => warn!("Failed to generate embedding for {}::{}: {}", path, symbol.name, e),
-                                            }
-                                        }
-                                        debug!("Successfully updated index for: {}", path);
-                                    }
-                                    Err(e) => warn!("Failed to parse update for {}: {}", path, e),
-                                }
-                            }
-                            Err(e) => warn!("Failed to read file {}: {}", path, e),
-                        }
+        let mut parser = CodeParser::new(lang)
+            .with_context(|| format!("Failed to create parser for {}", path))?;
+
+        let code = fs::read_to_string(path_obj)
+            .with_context(|| format!("Failed to read file {}", path))?;
+
+        let (symbols, graph, _, warnings) = parser
+            .parse(path, &code)
+            .with_context(|| format!("Failed to parse {}", path))?;
+
+        self.db.save_symbols(path, &symbols)?;
+        self.db.save_relationships(path, &graph)?;
+        self.db.save_warnings(path, &warnings)?;
+
+        for symbol in &symbols {
+            let text = format!(
+                "File: {}\nName: {}\nKind: {}\nDoc: {}\nSignature: {}",
+                path,
+                symbol.name,
+                symbol.kind,
+                symbol.docstring.clone().unwrap_or_default(),
+                symbol.signature.clone().unwrap_or_default()
+            );
+            match self.embedder.embed(&text) {
+                Ok(embedding) => {
+                    let id = format!("{}::{}", path, symbol.name);
+                    if let Err(e) = self.vector_store.add(path.to_string(), id, text, embedding) {
+                        warn!("Failed to add vector for {}: {}", symbol.name, e);
                     }
-                    Err(e) => warn!("Failed to initialize parser for {}: {}", path, e),
                 }
+                Err(e) => warn!("Failed to embed symbol {}: {}", symbol.name, e),
             }
         }
 

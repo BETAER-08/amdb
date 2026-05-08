@@ -8,7 +8,9 @@ pub fn init(conn: &Connection) -> Result<()> {
             name TEXT NOT NULL,
             kind TEXT NOT NULL,
             line INTEGER NOT NULL,
-            docstring TEXT
+            docstring TEXT,
+            is_public INTEGER NOT NULL DEFAULT 1,
+            signature TEXT
         )",
         [],
     )?;
@@ -53,6 +55,26 @@ pub fn init(conn: &Connection) -> Result<()> {
         "CREATE INDEX IF NOT EXISTS idx_relationships_file_path ON relationships (file_path)",
         [],
     )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_warnings_file_path ON warnings (file_path)",
+        [],
+    )?;
+
+    match conn.execute(
+        "ALTER TABLE symbols ADD COLUMN is_public INTEGER NOT NULL DEFAULT 1",
+        [],
+    ) {
+        Ok(_) => {}
+        Err(rusqlite::Error::SqliteFailure(_, _)) => {}
+        Err(e) => return Err(e),
+    }
+
+    match conn.execute("ALTER TABLE symbols ADD COLUMN signature TEXT", []) {
+        Ok(_) => {}
+        Err(rusqlite::Error::SqliteFailure(_, _)) => {}
+        Err(e) => return Err(e),
+    }
 
     Ok(())
 }

@@ -31,7 +31,7 @@ impl ContextDb {
 
         {
             let mut stmt = tx.prepare(
-                "INSERT INTO symbols (file_path, name, kind, line, docstring) VALUES (?1, ?2, ?3, ?4, ?5)"
+                "INSERT INTO symbols (file_path, name, kind, line, docstring, is_public, signature) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"
             )?;
 
             for sym in symbols {
@@ -40,7 +40,9 @@ impl ContextDb {
                     sym.name,
                     sym.kind,
                     sym.line,
-                    sym.docstring
+                    sym.docstring,
+                    sym.is_public as i64,
+                    sym.signature
                 ])?;
             }
         }
@@ -111,15 +113,15 @@ impl ContextDb {
     pub fn get_symbols(&self, file_path: &str) -> Result<Vec<CodeSymbol>> {
         let mut stmt = self
             .conn
-            .prepare("SELECT name, kind, line, docstring FROM symbols WHERE file_path = ?1")?;
+            .prepare("SELECT name, kind, line, docstring, is_public, signature FROM symbols WHERE file_path = ?1")?;
         let rows = stmt.query_map(params![file_path], |row| {
             Ok(CodeSymbol {
                 name: row.get(0)?,
                 kind: row.get(1)?,
                 line: row.get(2)?,
                 docstring: row.get(3)?,
-                is_public: true,
-                signature: None,
+                is_public: row.get::<_, i64>(4).unwrap_or(1) != 0,
+                signature: row.get(5)?,
             })
         })?;
 
