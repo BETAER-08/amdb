@@ -176,11 +176,12 @@ impl Indexer {
 
                         for symbol in &symbols {
                             let text = format!(
-                                "File: {}\nName: {}\nKind: {}\nDoc: {}",
+                                "File: {}\nName: {}\nKind: {}\nDoc: {}\nSignature: {}",
                                 path_str,
                                 symbol.name,
                                 symbol.kind,
-                                symbol.docstring.clone().unwrap_or_default()
+                                symbol.docstring.clone().unwrap_or_default(),
+                                symbol.signature.clone().unwrap_or_default()
                             );
 
                             match embedder.embed(&text) {
@@ -240,11 +241,13 @@ impl Indexer {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn update_file(root: &str, path: &str) -> Result<()> {
         let mut worker = IndexWorker::new(root)?;
         worker.update_file(path)
     }
 
+    #[allow(dead_code)]
     pub fn remove_file(root: &str, path: &str) -> Result<()> {
         let mut worker = IndexWorker::new(root)?;
         worker.remove_file(path)
