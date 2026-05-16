@@ -292,8 +292,8 @@ fn test_depth_directional_no_reverse() -> Result<(), Box<dyn std::error::Error>>
     let temp_dir = TempDir::new()?;
     let root = temp_dir.path();
 
-    std::fs::write(root.join("caller.rs"), "fn entry() { target(); }")?;
-    std::fs::write(root.join("target.rs"), "fn target() {}")?;
+    std::fs::write(root.join("core_impl.rs"), "fn unique_core_fn() {}")?;
+    std::fs::write(root.join("caller.rs"), "fn entry() { unique_core_fn(); }")?;
     std::fs::write(root.join("unrelated.rs"), "fn unrelated() { entry(); }")?;
 
     let mut cmd_init = cargo_bin_cmd!("amdb");
@@ -302,12 +302,12 @@ fn test_depth_directional_no_reverse() -> Result<(), Box<dyn std::error::Error>>
     let mut cmd_gen = cargo_bin_cmd!("amdb");
     cmd_gen.current_dir(root)
         .arg("generate")
-        .arg("--focus").arg("target")
+        .arg("--focus").arg("unique_core_fn")
         .arg("--depth").arg("0")
         .assert().success();
 
-    let content = std::fs::read_to_string(root.join(".amdb/target.md"))?;
-    assert!(content.contains("target.rs"));
+    let content = std::fs::read_to_string(root.join(".amdb/unique_core_fn.md"))?;
+    assert!(content.contains("core_impl.rs"));
     assert!(!content.contains("unrelated.rs"));
 
     Ok(())
