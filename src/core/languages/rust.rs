@@ -1,7 +1,22 @@
-use tree_sitter::Language;
+use super::{has_child_of_kind, signature_before_body, SymbolEnricher};
+use tree_sitter::{Language, Node};
 
 pub fn language() -> Language {
     tree_sitter_rust::LANGUAGE.into()
+}
+
+pub struct RustEnricher;
+
+pub static ENRICHER: RustEnricher = RustEnricher;
+
+impl SymbolEnricher for RustEnricher {
+    fn is_public(&self, node: Node, _src: &str) -> bool {
+        has_child_of_kind(node, "visibility_modifier")
+    }
+
+    fn signature(&self, node: Node, src: &str) -> Option<String> {
+        signature_before_body(node, src)
+    }
 }
 
 pub const QUERY: &str = r#"

@@ -156,6 +156,11 @@ The daemon will:
 - **JSON** (`.json`)
 - **Bash** (`.sh`, `.bash`)
 
+`is_public` and `signature` are derived from the actual AST for **Rust**, **Python**, and **TypeScript**
+(`.ts`/`.tsx`, sharing the TypeScript enricher). Every other supported language falls back to
+`is_public = true` and `signature = None` — symbols are still extracted, but these two fields are
+not yet enriched for them.
+
 ---
 
 ## ⚙️ Configuration

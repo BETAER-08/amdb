@@ -138,6 +138,11 @@ impl CodeParser {
                         kind = capture_name.to_string();
                         name = text;
                         line = capture.node.start_position().row + 1;
+
+                        let def_node = capture.node.parent().unwrap_or(capture.node);
+                        let enricher = self.language.enricher();
+                        is_public = enricher.is_public(def_node, code);
+                        signature = enricher.signature(def_node, code);
                     }
                     "Call" => {
                         if let Some(caller) = self.find_parent_function(capture.node, code) {
@@ -145,8 +150,6 @@ impl CodeParser {
                         }
                     }
                     "doc" => docstring = Some(text),
-                    "sig" => signature = Some(text),
-                    "pub" => is_public = true,
                     "route_method" => route_method = Some(text.replace("\"", "").to_lowercase()),
                     "route_path" => route_path = Some(text.replace("\"", "")),
                     _ => {}
