@@ -89,7 +89,10 @@ impl ContextGenerator {
             target_files = all_files;
         }
 
-        let mapped_edges: Vec<(&SymbolRef, &str)> = all_edges.iter().map(|e| (&e.caller, e.callee.as_str())).collect();
+        let mapped_edges: Vec<(&SymbolRef, &str, Option<&str>)> = all_edges
+            .iter()
+            .map(|e| (&e.caller, e.callee.as_str(), e.callee_file.as_deref()))
+            .collect();
 
         let content = Self::format_markdown_report(
             &db,
@@ -184,7 +187,7 @@ impl ContextGenerator {
     fn format_markdown_report(
         db: &ContextDb,
         target_files: &[String],
-        edges: &[(&SymbolRef, &str)],
+        edges: &[(&SymbolRef, &str, Option<&str>)],
         symbol_to_files: &HashMap<String, Vec<String>>,
         focus_query: Option<&str>,
         output_filename: &str,
@@ -224,9 +227,9 @@ impl ContextGenerator {
         let target_files_set: HashSet<&String> = target_files.iter().collect();
         let is_focus = focus_query.is_some();
 
-        let relevant_edges: Vec<(&SymbolRef, &str)> = edges
+        let relevant_edges: Vec<(&SymbolRef, &str, Option<&str>)> = edges
             .iter()
-            .filter(|(caller, _)| target_files_set.contains(&caller.file))
+            .filter(|(caller, _, _)| target_files_set.contains(&caller.file))
             .copied()
             .collect();
 
@@ -236,7 +239,7 @@ impl ContextGenerator {
             &relevant_edges[..]
         };
 
-        for (caller, callee) in display_edges {
+        for (caller, callee, callee_file) in display_edges {
             let mut include_edge = true;
             if is_focus {
                 if let Some(files) = symbol_to_files.get(*callee) {
@@ -254,8 +257,11 @@ impl ContextGenerator {
             }
 
             if include_edge {
-                let safe_caller = sanitize_mermaid_id(&caller.name);
-                let safe_callee = sanitize_mermaid_id(callee);
+                let safe_caller = sanitize_node_id(&caller.file, &caller.name);
+                let safe_callee = match callee_file {
+                    Some(cf) => sanitize_node_id(cf, callee),
+                    None => sanitize_node_id("_unresolved", callee),
+                };
                 if safe_caller != safe_callee {
                     content.push_str(&format!("    {} --> {};\n", safe_caller, safe_callee));
                 }
@@ -267,6 +273,14 @@ impl ContextGenerator {
     }
 }
 
-fn sanitize_mermaid_id(name: &str) -> String {
-    name.replace("::", "_").replace(['.', '/', '\\'], "_")
+fn sanitize_node_id(file: &str, name: &str) -> String {
+    let joined = if file.is_empty() {
+        name.to_string()
+    } else {
+        format!("{}__{}", file, name)
+    };
+
+    joined
+        .replace("::", "_")
+        .replace(['.', '/', '\\', '-'], "_")
 }

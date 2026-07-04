@@ -1,36 +1,5 @@
 # Changelog
 
-## [0.7.1] - 2026-07-05
-
-### Fixed
-- Mermaid node IDs were asymmetric: a caller's ID was sanitized from its full `file::name`
-  form while the same symbol's ID as a callee was sanitized from the bare name alone, so a
-  symbol appearing on both sides of a call chain got two different node IDs and the rendered
-  graph looked disconnected even where a real edge existed. Both sides now go through one
-  `sanitize_mermaid_id(name)` rule applied to the bare symbol name
-- `schema::init`'s `ALTER TABLE ADD COLUMN` migration caught every `SqliteFailure`, not just
-  "duplicate column name" — any other structural failure at that point would have been
-  silently swallowed. Narrowed to `is_duplicate_column_error`, which matches on the specific
-  message text
-- The pre-0.7 migration purged only the `relationships` table; a legacy `symbols` row (stale
-  `line`, always-false `is_public`) survived until its file was re-touched. The migration now
-  also purges `symbols`, consistent with how `relationships` was already handled
-
-### Added
-- Five strict regression tests: mermaid node-ID symmetry, a migration-error classifier test
-  pair (duplicate vs. genuinely different `SqliteFailure`), and a legacy-DB test proving stale
-  `symbols` rows no longer survive a migration
-
-### Investigated, not changed
-- Callee edges are still recorded as a raw name (`graph.edges: HashMap<SymbolRef, HashSet<String>>`),
-  never resolved to the defining file. This is confirmed, by-design behavior, not a regression
-  from 0.7.0 — `test_ambiguous_callee_resolution_is_pinned` documents it with two same-named
-  symbols in different files. A cross-file symbol resolver is deferred to v0.8.0
-- `impl_item` signature extraction was suspected to swallow the entire method block; verified
-  against the real tree-sitter-rust grammar that `signature_before_body` already cuts at the
-  `body` field correctly for `function_item`, `struct_item` and `impl_item` alike (they all use
-  the field name `body`). No change made
-
 ## [0.7.0] - 2026-07-05
 
 ### Fixed
@@ -51,6 +20,23 @@
 - `vector_store::search`'s graph-boosting code path was dead: `resolve_focus_targets` always
   passed `graph: None`. `generate` now builds a project-wide dependency graph once and threads
   it through, so boosting by call relationships actually runs
+- Mermaid node IDs were asymmetric: a caller's ID was sanitized from its full `file::name`
+  form while the same symbol's ID as a callee was sanitized from the bare name alone, so a
+  symbol appearing on both sides of a call chain got two different node IDs and the rendered
+  graph looked disconnected even where a real edge existed
+- `schema::init`'s `ALTER TABLE ADD COLUMN` migration caught every `SqliteFailure`, not just
+  "duplicate column name" — any other structural failure at that point would have been
+  silently swallowed. Narrowed to `is_duplicate_column_error`, which matches on the specific
+  message text
+- The migration purged only the `relationships` table; a legacy `symbols` row (stale `line`,
+  always-false `is_public`) survived until its file was re-touched. The migration now also
+  purges `symbols`, consistent with how `relationships` was already handled
+- Two functions sharing a name in different files collapsed into a single mermaid node, and
+  `relationships.callee` carried no file attribution at all. A post-index `SymbolResolver`
+  now attributes each call edge to a `callee_file` (same-file match, else global-unique
+  match, else left unresolved), and the mermaid renderer builds both node IDs from
+  `(file, name)` via one `sanitize_node_id` rule, so same-named symbols in different files
+  render as distinct nodes
 
 ### Added
 - `SymbolEnricher` trait (`core::languages`) with per-language `is_public`/`signature`
@@ -58,7 +44,20 @@
   `(true, None)`, documented in the README language table
 - `normalize_path(root, path)` helper for consistent file identity across `init` and the daemon
 - SQLite schema versioning via `PRAGMA user_version`: a pre-0.7 database is detected and its
-  stale-format `relationships` rows are purged instead of crashing on read
+  stale-format `relationships` and `symbols` rows are purged instead of crashing on read
+- `SymbolResolver` (`core::symbol`) resolving a callee name to its defining file when
+  unambiguous; `relationships` gained a nullable `callee_file` column populated by a
+  post-index resolution pass in `init`'s full scan. The daemon's incremental `update_file`
+  applies only the cheap same-file rule (it doesn't have the whole project's symbol table
+  available); cross-file/global-unique attribution for daemon-touched files is deferred until
+  the next full `init`, rather than guessed
+- Strict regression tests covering: exact line number, is_public true/false, signature
+  contents, a real mermaid edge arrow, a `std::collections::HashMap`-in-a-call regression,
+  mermaid node-ID symmetry, callee-resolution ambiguity pinning, a migration-error
+  classifier (duplicate vs. genuinely different `SqliteFailure`), a legacy-DB purge proof,
+  and the symbol resolver (distinct per-file nodes for a duplicate name, `callee_file`
+  persisted for a globally unique symbol, and an ambiguous duplicate left unresolved or
+  split rather than guessed)
 
 ### Changed
 - `indexer`'s init path and the daemon's `update_file` shared one `embedding_text(symbol)`
@@ -67,9 +66,12 @@
   the file, so the old `file::name` value was redundant)
 - `vectors` table gained a `name` column so search boosting compares structured values instead
   of parsing the `id` string
-- Five integration tests rewritten from substring "contains" checks to exact-value assertions
-  (line number, is_public, signature contents, an actual mermaid edge arrow, and a
-  `std::collections::HashMap`-in-a-call regression case for the identity refactor above)
+
+### Investigated, not changed
+- `impl_item` signature extraction was suspected to swallow the entire method block; verified
+  against the real tree-sitter-rust grammar that `signature_before_body` already cuts at the
+  `body` field correctly for `function_item`, `struct_item` and `impl_item` alike (they all use
+  the field name `body`). No change made
 
 ## [0.6.0] - 2025-05-08
 

@@ -7,6 +7,7 @@ use std::path::Path;
 pub struct Relationship {
     pub caller: SymbolRef,
     pub callee: String,
+    pub callee_file: Option<String>,
 }
 
 pub struct ContextDb {
@@ -136,15 +137,16 @@ impl ContextDb {
 
     #[allow(dead_code)]
     pub fn get_relationships(&self, file_path: &str) -> Result<Vec<Relationship>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT file_path, caller, callee FROM relationships WHERE file_path = ?1")?;
+        let mut stmt = self.conn.prepare(
+            "SELECT file_path, caller, callee, callee_file FROM relationships WHERE file_path = ?1",
+        )?;
         let rows = stmt.query_map(params![file_path], |row| {
             let file: String = row.get(0)?;
             let caller: String = row.get(1)?;
             Ok(Relationship {
                 caller: SymbolRef::new(file, caller),
                 callee: row.get(2)?,
+                callee_file: row.get(3)?,
             })
         })?;
 
@@ -153,6 +155,24 @@ impl ContextDb {
             edges.push(edge?);
         }
         Ok(edges)
+    }
+
+    pub fn update_relationship_callee_files(
+        &mut self,
+        file_path: &str,
+        resolved: &[(String, String, Option<String>)],
+    ) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        {
+            let mut stmt = tx.prepare(
+                "UPDATE relationships SET callee_file = ?1 WHERE file_path = ?2 AND caller = ?3 AND callee = ?4",
+            )?;
+
+            for (caller, callee, callee_file) in resolved {
+                stmt.execute(params![callee_file, file_path, caller, callee])?;
+            }
+        }
+        tx.commit()
     }
 
     #[allow(dead_code)]
@@ -191,13 +211,14 @@ impl ContextDb {
     pub fn get_all_relationships(&self) -> Result<Vec<Relationship>> {
         let mut stmt = self
             .conn
-            .prepare("SELECT file_path, caller, callee FROM relationships")?;
+            .prepare("SELECT file_path, caller, callee, callee_file FROM relationships")?;
         let rows = stmt.query_map([], |row| {
             let file: String = row.get(0)?;
             let caller: String = row.get(1)?;
             Ok(Relationship {
                 caller: SymbolRef::new(file, caller),
                 callee: row.get(2)?,
+                callee_file: row.get(3)?,
             })
         })?;
 

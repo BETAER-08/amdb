@@ -3,7 +3,7 @@ use crate::core::embedding::EmbeddingEngine;
 use crate::core::graph::DependencyGraph;
 use crate::core::languages::SupportedLanguage;
 use crate::core::parser::{embedding_text, CodeParser, CodeSymbol, CodeWarning};
-use crate::core::symbol::{normalize_path, SymbolRef};
+use crate::core::symbol::{normalize_path, SymbolRef, SymbolResolver};
 use crate::core::vector_store::VectorStore;
 use crate::db::ContextDb;
 use anyhow::Result;
@@ -84,6 +84,23 @@ impl IndexWorker {
         self.db.save_symbols(&stored_path, &symbols)?;
         self.db.save_relationships(&stored_path, &graph)?;
         self.db.save_warnings(&stored_path, &warnings)?;
+
+        let resolved: Vec<(String, String, Option<String>)> = graph
+            .edges
+            .iter()
+            .flat_map(|(caller, callees)| {
+                callees.iter().map(|callee| {
+                    let callee_file = if symbols.iter().any(|s| &s.name == callee) {
+                        Some(stored_path.clone())
+                    } else {
+                        None
+                    };
+                    (caller.name.clone(), callee.clone(), callee_file)
+                })
+            })
+            .collect();
+        self.db
+            .update_relationship_callee_files(&stored_path, &resolved)?;
 
         for symbol in &symbols {
             let text = embedding_text(symbol);
@@ -209,12 +226,32 @@ impl Indexer {
             })
             .collect();
 
+        let mut resolver = SymbolResolver::new();
+        for data in &results {
+            for symbol in &data.symbols {
+                resolver.register(&data.path, &symbol.name);
+            }
+        }
+
         vector_store.begin_transaction()?;
 
         for data in results {
             db.save_symbols(&data.path, &data.symbols)?;
             db.save_relationships(&data.path, &data.graph)?;
             db.save_warnings(&data.path, &data.warnings)?;
+
+            let resolved: Vec<(String, String, Option<String>)> = data
+                .graph
+                .edges
+                .iter()
+                .flat_map(|(caller, callees)| {
+                    callees.iter().map(|callee| {
+                        let callee_file = resolver.resolve(&caller.file, callee);
+                        (caller.name.clone(), callee.clone(), callee_file)
+                    })
+                })
+                .collect();
+            db.update_relationship_callee_files(&data.path, &resolved)?;
 
             if !data.warnings.is_empty() {
                 for warning in &data.warnings {

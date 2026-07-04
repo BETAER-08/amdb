@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -17,6 +18,45 @@ impl SymbolRef {
 
     pub fn to_key(&self) -> String {
         format!("{}::{}", self.file, self.name)
+    }
+}
+
+pub struct SymbolResolver {
+    by_name: HashMap<String, HashSet<String>>,
+}
+
+impl SymbolResolver {
+    pub fn new() -> Self {
+        Self {
+            by_name: HashMap::new(),
+        }
+    }
+
+    pub fn register(&mut self, file: &str, name: &str) {
+        self.by_name
+            .entry(name.to_string())
+            .or_default()
+            .insert(file.to_string());
+    }
+
+    pub fn resolve(&self, caller_file: &str, callee_name: &str) -> Option<String> {
+        let files = self.by_name.get(callee_name)?;
+
+        if files.contains(caller_file) {
+            return Some(caller_file.to_string());
+        }
+
+        if files.len() == 1 {
+            return files.iter().next().cloned();
+        }
+
+        None
+    }
+}
+
+impl Default for SymbolResolver {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

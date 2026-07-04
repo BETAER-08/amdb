@@ -1,6 +1,6 @@
 use rusqlite::{Connection, Result};
 
-const CURRENT_SCHEMA_VERSION: i32 = 2;
+const CURRENT_SCHEMA_VERSION: i32 = 3;
 
 pub fn init(conn: &Connection) -> Result<bool> {
     conn.execute(
@@ -22,7 +22,8 @@ pub fn init(conn: &Connection) -> Result<bool> {
             id INTEGER PRIMARY KEY,
             file_path TEXT NOT NULL,
             caller TEXT NOT NULL,
-            callee TEXT NOT NULL
+            callee TEXT NOT NULL,
+            callee_file TEXT
         )",
         [],
     )?;
@@ -73,6 +74,12 @@ pub fn init(conn: &Connection) -> Result<bool> {
     }
 
     match conn.execute("ALTER TABLE symbols ADD COLUMN signature TEXT", []) {
+        Ok(_) => {}
+        Err(e) if is_duplicate_column_error(&e) => {}
+        Err(e) => return Err(e),
+    }
+
+    match conn.execute("ALTER TABLE relationships ADD COLUMN callee_file TEXT", []) {
         Ok(_) => {}
         Err(e) if is_duplicate_column_error(&e) => {}
         Err(e) => return Err(e),

@@ -605,3 +605,129 @@ fn test_ambiguous_callee_resolution_is_pinned() -> Result<(), Box<dyn std::error
 
     Ok(())
 }
+
+#[test]
+fn test_duplicate_name_functions_are_split_by_file() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = TempDir::new()?;
+    let root = temp_dir.path();
+
+    fs::write(
+        root.join("alpha_module.rs"),
+        "fn alpha_entry() { shared_dup_fn(); }\nfn shared_dup_fn() {}",
+    )?;
+    fs::write(
+        root.join("beta_module.rs"),
+        "fn beta_entry() { shared_dup_fn(); }\nfn shared_dup_fn() {}",
+    )?;
+
+    cargo_bin_cmd!("amdb")
+        .current_dir(root)
+        .arg("init")
+        .arg(".")
+        .assert()
+        .success();
+
+    cargo_bin_cmd!("amdb")
+        .current_dir(root)
+        .arg("generate")
+        .assert()
+        .success();
+
+    let content = fs::read_to_string(root.join(".amdb/context.md"))?;
+    let edges = parse_mermaid_edges(&content);
+
+    let alpha_callee_id = edges
+        .iter()
+        .find(|(left, _)| left.contains("alpha_entry"))
+        .map(|(_, right)| right.clone())
+        .expect("alpha_entry --> shared_dup_fn edge missing");
+
+    let beta_callee_id = edges
+        .iter()
+        .find(|(left, _)| left.contains("beta_entry"))
+        .map(|(_, right)| right.clone())
+        .expect("beta_entry --> shared_dup_fn edge missing");
+
+    assert_ne!(
+        alpha_callee_id, beta_callee_id,
+        "both shared_dup_fn definitions collapsed into one mermaid node: {}",
+        alpha_callee_id
+    );
+    assert!(alpha_callee_id.contains("alpha_module"));
+    assert!(beta_callee_id.contains("beta_module"));
+
+    Ok(())
+}
+
+#[test]
+fn test_callee_file_persisted_for_unique_symbol() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = TempDir::new()?;
+    let root = temp_dir.path();
+
+    fs::write(
+        root.join("definer_module.rs"),
+        "fn unique_defined_once_fn() {}",
+    )?;
+    fs::write(
+        root.join("caller_module.rs"),
+        "fn unique_defined_once_fn_caller() { unique_defined_once_fn(); }",
+    )?;
+
+    cargo_bin_cmd!("amdb")
+        .current_dir(root)
+        .arg("init")
+        .arg(".")
+        .assert()
+        .success();
+
+    let conn = open_context_db(root);
+    let callee_file: String = conn.query_row(
+        "SELECT callee_file FROM relationships WHERE caller = ?1",
+        rusqlite::params!["unique_defined_once_fn_caller"],
+        |row| row.get(0),
+    )?;
+
+    assert_eq!(callee_file, "definer_module.rs");
+
+    Ok(())
+}
+
+#[test]
+fn test_ambiguous_callee_marked_unresolved_or_split() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = TempDir::new()?;
+    let root = temp_dir.path();
+
+    fs::write(root.join("ambiguous_def_one.rs"), "fn ambiguous_dup_fn() {}")?;
+    fs::write(root.join("ambiguous_def_two.rs"), "fn ambiguous_dup_fn() {}")?;
+    fs::write(
+        root.join("ambiguous_caller_module.rs"),
+        "fn ambiguous_caller_fn() { ambiguous_dup_fn(); }",
+    )?;
+
+    cargo_bin_cmd!("amdb")
+        .current_dir(root)
+        .arg("init")
+        .arg(".")
+        .assert()
+        .success();
+
+    let conn = open_context_db(root);
+    let callee_file: Option<String> = conn.query_row(
+        "SELECT callee_file FROM relationships WHERE caller = ?1",
+        rusqlite::params!["ambiguous_caller_fn"],
+        |row| row.get(0),
+    )?;
+
+    match callee_file {
+        None => {}
+        Some(file) => {
+            assert!(
+                file == "ambiguous_def_one.rs" || file == "ambiguous_def_two.rs",
+                "callee_file {} does not match either defining file",
+                file
+            );
+        }
+    }
+
+    Ok(())
+}
