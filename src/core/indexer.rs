@@ -201,10 +201,14 @@ impl Indexer {
 
                             match embedder.embed(&text) {
                                 Ok(embedding) => {
-                                    let sym = SymbolRef::new(stored_path.clone(), symbol.name.clone());
+                                    let sym =
+                                        SymbolRef::new(stored_path.clone(), symbol.name.clone());
                                     vectors.push((sym, text, embedding));
                                 }
-                                Err(e) => warn!("Failed to embed symbol {} in {}: {}", symbol.name, stored_path, e),
+                                Err(e) => warn!(
+                                    "Failed to embed symbol {} in {}: {}",
+                                    symbol.name, stored_path, e
+                                ),
                             }
                         }
 

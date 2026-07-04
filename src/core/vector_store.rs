@@ -1,12 +1,12 @@
-use anyhow::Result;
-use rusqlite::{params, Connection};
-use serde::{Deserialize, Serialize};
-use rayon::prelude::*;
-use std::cmp::Ordering;
-use std::path::Path;
-use std::collections::HashSet;
 use crate::core::graph::DependencyGraph;
 use crate::core::symbol::SymbolRef;
+use anyhow::Result;
+use rayon::prelude::*;
+use rusqlite::{params, Connection};
+use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
+use std::collections::HashSet;
+use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VectorRecord {
@@ -56,12 +56,13 @@ impl VectorStore {
              PRAGMA synchronous = NORMAL;",
         )?;
 
-        let had_name_column = conn
-            .prepare("SELECT name FROM vectors LIMIT 1")
-            .is_ok();
+        let had_name_column = conn.prepare("SELECT name FROM vectors LIMIT 1").is_ok();
 
         if !had_name_column {
-            conn.execute("ALTER TABLE vectors ADD COLUMN name TEXT NOT NULL DEFAULT ''", [])?;
+            conn.execute(
+                "ALTER TABLE vectors ADD COLUMN name TEXT NOT NULL DEFAULT ''",
+                [],
+            )?;
             conn.execute("DELETE FROM vectors", [])?;
         }
 
@@ -97,8 +98,15 @@ impl VectorStore {
         Ok(())
     }
 
-    pub fn search(&self, query_vec: &[f32], limit: usize, graph: Option<&DependencyGraph>) -> Result<Vec<(f64, VectorRecord)>> {
-        let mut stmt = self.conn.prepare("SELECT id, file_path, name, text, vector FROM vectors")?;
+    pub fn search(
+        &self,
+        query_vec: &[f32],
+        limit: usize,
+        graph: Option<&DependencyGraph>,
+    ) -> Result<Vec<(f64, VectorRecord)>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, file_path, name, text, vector FROM vectors")?;
 
         let mut rows = stmt.query([])?;
         let mut records = Vec::new();
@@ -112,13 +120,20 @@ impl VectorStore {
             records.push((id, file_path, name, text, vector_blob));
         }
 
-        let mut evaluated: Vec<SearchCandidate> = records.into_par_iter()
+        let mut evaluated: Vec<SearchCandidate> = records
+            .into_par_iter()
             .filter_map(|(id, file_path, name, text, vector_blob)| {
                 if let Ok(vector) = bincode::deserialize::<Vec<f32>>(&vector_blob) {
                     let score = cosine_similarity(query_vec, &vector);
                     Some(SearchCandidate {
                         score,
-                        record: VectorRecord { id, file_path, name, text, vector }
+                        record: VectorRecord {
+                            id,
+                            file_path,
+                            name,
+                            text,
+                            vector,
+                        },
                     })
                 } else {
                     None
@@ -127,13 +142,16 @@ impl VectorStore {
             .collect();
 
         if let Some(g) = graph {
-            evaluated.sort_unstable_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
+            evaluated
+                .sort_unstable_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
 
             let mut top_syms = HashSet::new();
             let mut top_names = HashSet::new();
 
             for (i, cand) in evaluated.iter().enumerate() {
-                if i >= 5 { break; }
+                if i >= 5 {
+                    break;
+                }
                 top_syms.insert(cand.record.symbol());
                 top_names.insert(cand.record.name.clone());
             }
@@ -169,7 +187,8 @@ impl VectorStore {
     }
 
     pub fn save(&self, _path: &Path) -> Result<()> {
-        self.conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?;
+        self.conn
+            .execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?;
         Ok(())
     }
 }

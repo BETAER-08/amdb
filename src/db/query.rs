@@ -22,7 +22,10 @@ impl ContextDb {
 
         let needs_reindex = schema::init(&conn)?;
 
-        Ok(Self { conn, needs_reindex })
+        Ok(Self {
+            conn,
+            needs_reindex,
+        })
     }
 
     pub fn save_symbols(&mut self, file_path: &str, symbols: &[CodeSymbol]) -> Result<()> {

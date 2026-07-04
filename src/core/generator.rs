@@ -1,14 +1,14 @@
+use crate::core::embedding::EmbeddingEngine;
+use crate::core::graph::DependencyGraph;
+use crate::core::symbol::SymbolRef;
+use crate::core::vector_store::VectorStore;
+use crate::db::ContextDb;
 use anyhow::Result;
 use console::style;
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
-use crate::core::embedding::EmbeddingEngine;
-use crate::core::graph::DependencyGraph;
-use crate::core::symbol::SymbolRef;
-use crate::core::vector_store::VectorStore;
-use crate::db::ContextDb;
 
 pub struct ContextGenerator;
 
@@ -22,7 +22,10 @@ impl ContextGenerator {
         }
 
         if !db_dir.exists() {
-            eprintln!("{}", style("Error: Database not found. Run 'amdb init' first.").red());
+            eprintln!(
+                "{}",
+                style("Error: Database not found. Run 'amdb init' first.").red()
+            );
             std::process::exit(1);
         }
 
@@ -49,7 +52,10 @@ impl ContextGenerator {
         for file in &all_files {
             if let Ok(symbols) = db.get_symbols(file) {
                 for sym in symbols {
-                    symbol_to_files.entry(sym.name).or_default().push(file.clone());
+                    symbol_to_files
+                        .entry(sym.name)
+                        .or_default()
+                        .push(file.clone());
                 }
             }
         }
@@ -61,13 +67,25 @@ impl ContextGenerator {
             let safe_name = query.replace(" ", "-").replace("/", "-").to_lowercase();
             output_filename = format!("{}.md", safe_name);
 
-            println!("{}", style(format!("Filtering context for: '{}' with depth {}...", query, depth)).cyan());
+            println!(
+                "{}",
+                style(format!(
+                    "Filtering context for: '{}' with depth {}...",
+                    query, depth
+                ))
+                .cyan()
+            );
 
             let embedder = EmbeddingEngine::new()?;
-            let paths = Self::resolve_focus_targets(db_dir, &all_files, &db, query, &embedder, &graph).await?;
+            let paths =
+                Self::resolve_focus_targets(db_dir, &all_files, &db, query, &embedder, &graph)
+                    .await?;
 
             if paths.is_empty() {
-                println!("{}", style("No matches found. Falling back to full context.").yellow());
+                println!(
+                    "{}",
+                    style("No matches found. Falling back to full context.").yellow()
+                );
                 target_files = all_files;
             } else {
                 let mut file_graph: HashMap<String, HashSet<String>> = HashMap::new();
@@ -76,7 +94,10 @@ impl ContextGenerator {
                     if let Some(callee_files) = symbol_to_files.get(&edge.callee) {
                         for callee_file in callee_files {
                             if caller_file != callee_file {
-                                file_graph.entry(caller_file.clone()).or_default().insert(callee_file.clone());
+                                file_graph
+                                    .entry(caller_file.clone())
+                                    .or_default()
+                                    .insert(callee_file.clone());
                             }
                         }
                     }
@@ -107,7 +128,12 @@ impl ContextGenerator {
         let mut file = File::create(&output_path)?;
         file.write_all(content.as_bytes())?;
 
-        println!("{}", style(format!("Generated: {}", output_path.display())).green().bold());
+        println!(
+            "{}",
+            style(format!("Generated: {}", output_path.display()))
+                .green()
+                .bold()
+        );
         Ok(())
     }
 
@@ -127,7 +153,9 @@ impl ContextGenerator {
             let file_stem = path_obj.file_stem().unwrap_or_default().to_string_lossy();
 
             if file_name.eq_ignore_ascii_case(query) || file_stem.eq_ignore_ascii_case(query) {
-                if !paths.contains(file) { paths.push(file.clone()); }
+                if !paths.contains(file) {
+                    paths.push(file.clone());
+                }
             } else if let Ok(symbols) = db.get_symbols(file) {
                 if symbols.iter().any(|s| s.name.eq_ignore_ascii_case(query))
                     && !paths.contains(file)
@@ -200,7 +228,9 @@ impl ContextGenerator {
         content.push_str("## File Summaries\n\n");
         for file_path in target_files {
             let symbols = db.get_symbols(file_path)?;
-            if symbols.is_empty() { continue; }
+            if symbols.is_empty() {
+                continue;
+            }
 
             content.push_str(&format!("### {}\n", file_path));
 

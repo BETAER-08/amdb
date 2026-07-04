@@ -75,7 +75,12 @@ fn test_focus_mode() -> Result<(), Box<dyn std::error::Error>> {
     fs::write(&file_path, "fn login() {}")?;
 
     let mut cmd_init = cargo_bin_cmd!("amdb");
-    cmd_init.current_dir(root).arg("init").arg(".").assert().success();
+    cmd_init
+        .current_dir(root)
+        .arg("init")
+        .arg(".")
+        .assert()
+        .success();
 
     let mut cmd_focus = cargo_bin_cmd!("amdb");
     cmd_focus
@@ -135,7 +140,12 @@ fn test_dynamic_config_exclude() -> Result<(), Box<dyn std::error::Error>> {
     fs::write(&public_file, "fn public_api() {}")?;
 
     let mut cmd_init = cargo_bin_cmd!("amdb");
-    cmd_init.current_dir(root).arg("init").arg(".").assert().success();
+    cmd_init
+        .current_dir(root)
+        .arg("init")
+        .arg(".")
+        .assert()
+        .success();
 
     let mut cmd_gen = cargo_bin_cmd!("amdb");
     cmd_gen.current_dir(root).arg("generate").assert().success();
@@ -155,7 +165,10 @@ fn test_config_toml_override_db_path() -> Result<(), Box<dyn std::error::Error>>
     let root = temp_dir.path();
 
     let config_path = root.join("amdb.toml");
-    fs::write(&config_path, "db_path = \".custom_toml_db\"\nignore_patterns = [\"test_ignore\"]")?;
+    fs::write(
+        &config_path,
+        "db_path = \".custom_toml_db\"\nignore_patterns = [\"test_ignore\"]",
+    )?;
 
     let mut cmd_init = cargo_bin_cmd!("amdb");
     cmd_init
@@ -202,14 +215,23 @@ fn test_depth_control_integration() -> Result<(), Box<dyn std::error::Error>> {
     fs::write(&b_rs, "fn func_b() {}")?;
 
     let mut cmd_init = cargo_bin_cmd!("amdb");
-    cmd_init.current_dir(root).arg("init").arg(".").assert().success();
+    cmd_init
+        .current_dir(root)
+        .arg("init")
+        .arg(".")
+        .assert()
+        .success();
 
     let mut cmd_depth0 = cargo_bin_cmd!("amdb");
-    cmd_depth0.current_dir(root)
+    cmd_depth0
+        .current_dir(root)
         .arg("generate")
-        .arg("--focus").arg("main")
-        .arg("--depth").arg("0")
-        .assert().success();
+        .arg("--focus")
+        .arg("main")
+        .arg("--depth")
+        .arg("0")
+        .assert()
+        .success();
 
     let context_md = root.join(".amdb/main.md");
     let content_0 = fs::read_to_string(&context_md)?;
@@ -218,11 +240,15 @@ fn test_depth_control_integration() -> Result<(), Box<dyn std::error::Error>> {
     assert!(!content_0.contains("b.rs"));
 
     let mut cmd_depth1 = cargo_bin_cmd!("amdb");
-    cmd_depth1.current_dir(root)
+    cmd_depth1
+        .current_dir(root)
         .arg("generate")
-        .arg("--focus").arg("main")
-        .arg("--depth").arg("1")
-        .assert().success();
+        .arg("--focus")
+        .arg("main")
+        .arg("--depth")
+        .arg("1")
+        .assert()
+        .success();
 
     let content_1 = fs::read_to_string(&context_md)?;
     assert!(content_1.contains("main.rs"));
@@ -230,11 +256,15 @@ fn test_depth_control_integration() -> Result<(), Box<dyn std::error::Error>> {
     assert!(!content_1.contains("b.rs"));
 
     let mut cmd_depth2 = cargo_bin_cmd!("amdb");
-    cmd_depth2.current_dir(root)
+    cmd_depth2
+        .current_dir(root)
         .arg("generate")
-        .arg("--focus").arg("main")
-        .arg("--depth").arg("2")
-        .assert().success();
+        .arg("--focus")
+        .arg("main")
+        .arg("--depth")
+        .arg("2")
+        .assert()
+        .success();
 
     let content_2 = fs::read_to_string(&context_md)?;
     assert!(content_2.contains("main.rs"));
@@ -250,17 +280,29 @@ fn test_directional_graph_excludes_callers() -> Result<(), Box<dyn std::error::E
     let root = temp_dir.path();
 
     std::fs::write(root.join("def.rs"), "fn probe_alpha_unique_fn() {}")?;
-    std::fs::write(root.join("user.rs"), "fn probe_caller_unique_fn() { probe_alpha_unique_fn(); }")?;
+    std::fs::write(
+        root.join("user.rs"),
+        "fn probe_caller_unique_fn() { probe_alpha_unique_fn(); }",
+    )?;
 
     let mut cmd_init = cargo_bin_cmd!("amdb");
-    cmd_init.current_dir(root).arg("init").arg(".").assert().success();
+    cmd_init
+        .current_dir(root)
+        .arg("init")
+        .arg(".")
+        .assert()
+        .success();
 
     let mut cmd_gen = cargo_bin_cmd!("amdb");
-    cmd_gen.current_dir(root)
+    cmd_gen
+        .current_dir(root)
         .arg("generate")
-        .arg("--focus").arg("probe_alpha_unique_fn")
-        .arg("--depth").arg("1")
-        .assert().success();
+        .arg("--focus")
+        .arg("probe_alpha_unique_fn")
+        .arg("--depth")
+        .arg("1")
+        .assert()
+        .success();
 
     let content = std::fs::read_to_string(root.join(".amdb/probe_alpha_unique_fn.md"))?;
     assert!(content.contains("def.rs"));
@@ -278,7 +320,12 @@ fn test_symbol_fields_persisted() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::write(&src, "pub fn public_func(x: i32) -> i32 { x }")?;
 
     let mut cmd_init = cargo_bin_cmd!("amdb");
-    cmd_init.current_dir(root).arg("init").arg(".").assert().success();
+    cmd_init
+        .current_dir(root)
+        .arg("init")
+        .arg(".")
+        .assert()
+        .success();
 
     let mut cmd_gen = cargo_bin_cmd!("amdb");
     cmd_gen.current_dir(root).arg("generate").assert().success();
@@ -298,7 +345,11 @@ fn test_vector_store_save_no_panic() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::write(&src, "fn main() {}")?;
 
     let mut cmd = cargo_bin_cmd!("amdb");
-    cmd.current_dir(root).arg("init").arg(".").assert().success();
+    cmd.current_dir(root)
+        .arg("init")
+        .arg(".")
+        .assert()
+        .success();
 
     Ok(())
 }
@@ -313,14 +364,23 @@ fn test_depth_directional_no_reverse() -> Result<(), Box<dyn std::error::Error>>
     std::fs::write(root.join("unrelated.rs"), "fn unrelated() { entry(); }")?;
 
     let mut cmd_init = cargo_bin_cmd!("amdb");
-    cmd_init.current_dir(root).arg("init").arg(".").assert().success();
+    cmd_init
+        .current_dir(root)
+        .arg("init")
+        .arg(".")
+        .assert()
+        .success();
 
     let mut cmd_gen = cargo_bin_cmd!("amdb");
-    cmd_gen.current_dir(root)
+    cmd_gen
+        .current_dir(root)
         .arg("generate")
-        .arg("--focus").arg("unique_core_fn")
-        .arg("--depth").arg("0")
-        .assert().success();
+        .arg("--focus")
+        .arg("unique_core_fn")
+        .arg("--depth")
+        .arg("0")
+        .assert()
+        .success();
 
     let content = std::fs::read_to_string(root.join(".amdb/unique_core_fn.md"))?;
     assert!(content.contains("core_impl.rs"));
@@ -449,9 +509,11 @@ fn test_mermaid_graph_contains_cross_file_edge() -> Result<(), Box<dyn std::erro
     let content = fs::read_to_string(root.join(".amdb/context.md"))?;
     assert!(content.contains("```mermaid"));
 
-    let has_edge_arrow_between = content
-        .lines()
-        .any(|line| line.contains("-->") && line.contains("alpha_unique_sym") && line.contains("beta_unique_sym"));
+    let has_edge_arrow_between = content.lines().any(|line| {
+        line.contains("-->")
+            && line.contains("alpha_unique_sym")
+            && line.contains("beta_unique_sym")
+    });
 
     assert!(
         has_edge_arrow_between,
@@ -462,7 +524,8 @@ fn test_mermaid_graph_contains_cross_file_edge() -> Result<(), Box<dyn std::erro
 }
 
 #[test]
-fn test_scoped_path_call_does_not_corrupt_edge_identity() -> Result<(), Box<dyn std::error::Error>> {
+fn test_scoped_path_call_does_not_corrupt_edge_identity() -> Result<(), Box<dyn std::error::Error>>
+{
     let temp_dir = TempDir::new()?;
     let root = temp_dir.path();
 
@@ -486,8 +549,16 @@ fn test_scoped_path_call_does_not_corrupt_edge_identity() -> Result<(), Box<dyn 
 
     for row in rows {
         let (caller, callee) = row?;
-        assert!(!caller.contains("::"), "caller identity leaked a joined path: {}", caller);
-        assert!(!callee.contains("::"), "callee identity leaked a joined path: {}", callee);
+        assert!(
+            !caller.contains("::"),
+            "caller identity leaked a joined path: {}",
+            caller
+        );
+        assert!(
+            !callee.contains("::"),
+            "callee identity leaked a joined path: {}",
+            callee
+        );
     }
 
     cargo_bin_cmd!("amdb")
@@ -697,8 +768,14 @@ fn test_ambiguous_callee_marked_unresolved_or_split() -> Result<(), Box<dyn std:
     let temp_dir = TempDir::new()?;
     let root = temp_dir.path();
 
-    fs::write(root.join("ambiguous_def_one.rs"), "fn ambiguous_dup_fn() {}")?;
-    fs::write(root.join("ambiguous_def_two.rs"), "fn ambiguous_dup_fn() {}")?;
+    fs::write(
+        root.join("ambiguous_def_one.rs"),
+        "fn ambiguous_dup_fn() {}",
+    )?;
+    fs::write(
+        root.join("ambiguous_def_two.rs"),
+        "fn ambiguous_dup_fn() {}",
+    )?;
     fs::write(
         root.join("ambiguous_caller_module.rs"),
         "fn ambiguous_caller_fn() { ambiguous_dup_fn(); }",

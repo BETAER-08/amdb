@@ -31,7 +31,8 @@ lazy_static! {
         ),
         (
             "Hardcoded JWT",
-            Regex::new(r"ey[A-Za-z0-9-_]{20,}\.[A-Za-z0-9-_]{20,}\.[A-Za-z0-9-_.+/=]{20,}").unwrap()
+            Regex::new(r"ey[A-Za-z0-9-_]{20,}\.[A-Za-z0-9-_]{20,}\.[A-Za-z0-9-_.+/=]{20,}")
+                .unwrap()
         ),
     ];
 }
