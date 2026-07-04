@@ -254,8 +254,8 @@ impl ContextGenerator {
             }
 
             if include_edge {
-                let safe_caller = caller.to_key().replace("::", "_").replace(".", "_").replace("/", "_").replace("\\", "_");
-                let safe_callee = callee.replace("::", "_").replace(".", "_").replace("/", "_").replace("\\", "_");
+                let safe_caller = sanitize_mermaid_id(&caller.name);
+                let safe_callee = sanitize_mermaid_id(callee);
                 if safe_caller != safe_callee {
                     content.push_str(&format!("    {} --> {};\n", safe_caller, safe_callee));
                 }
@@ -265,4 +265,8 @@ impl ContextGenerator {
 
         Ok(content)
     }
+}
+
+fn sanitize_mermaid_id(name: &str) -> String {
+    name.replace("::", "_").replace(['.', '/', '\\'], "_")
 }

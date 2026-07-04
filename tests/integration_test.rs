@@ -8,6 +8,20 @@ fn open_context_db(root: &std::path::Path) -> Connection {
     Connection::open(root.join(".database/context.db")).expect("open context.db")
 }
 
+fn parse_mermaid_edges(content: &str) -> Vec<(String, String)> {
+    content
+        .lines()
+        .filter(|line| line.contains("-->"))
+        .filter_map(|line| {
+            let trimmed = line.trim().trim_end_matches(';');
+            let mut parts = trimmed.splitn(2, "-->");
+            let left = parts.next()?.trim().to_string();
+            let right = parts.next()?.trim().to_string();
+            Some((left, right))
+        })
+        .collect()
+}
+
 #[test]
 fn test_end_to_end_workflow() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = TempDir::new()?;
@@ -484,6 +498,110 @@ fn test_scoped_path_call_does_not_corrupt_edge_identity() -> Result<(), Box<dyn 
 
     let content = fs::read_to_string(root.join(".amdb/context.md"))?;
     assert!(content.contains("scoped_call_unique_fn"));
+
+    Ok(())
+}
+
+#[test]
+fn test_mermaid_node_id_symmetry() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = TempDir::new()?;
+    let root = temp_dir.path();
+
+    fs::write(
+        root.join("alpha_module.rs"),
+        "fn alpha_unique_sym() { beta_unique_sym(); }",
+    )?;
+    fs::write(
+        root.join("beta_module.rs"),
+        "fn beta_unique_sym() { gamma_unique_sym(); }",
+    )?;
+    fs::write(root.join("gamma_module.rs"), "fn gamma_unique_sym() {}")?;
+
+    cargo_bin_cmd!("amdb")
+        .current_dir(root)
+        .arg("init")
+        .arg(".")
+        .assert()
+        .success();
+
+    cargo_bin_cmd!("amdb")
+        .current_dir(root)
+        .arg("generate")
+        .assert()
+        .success();
+
+    let content = fs::read_to_string(root.join(".amdb/context.md"))?;
+    let edges = parse_mermaid_edges(&content);
+
+    let callee_side_beta_id = edges
+        .iter()
+        .find(|(left, _)| left.contains("alpha_unique_sym"))
+        .map(|(_, right)| right.clone())
+        .expect("alpha_unique_sym --> beta_unique_sym edge missing");
+
+    let caller_side_beta_id = edges
+        .iter()
+        .find(|(left, _)| left.contains("beta_unique_sym"))
+        .map(|(left, _)| left.clone())
+        .expect("beta_unique_sym --> gamma_unique_sym edge missing");
+
+    assert_eq!(
+        callee_side_beta_id, caller_side_beta_id,
+        "beta_unique_sym has two different node IDs depending on caller/callee position: {} vs {}",
+        callee_side_beta_id, caller_side_beta_id
+    );
+
+    Ok(())
+}
+
+#[test]
+fn test_ambiguous_callee_resolution_is_pinned() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = TempDir::new()?;
+    let root = temp_dir.path();
+
+    fs::write(
+        root.join("first_definer.rs"),
+        "fn shared_name() { first_definer_marker_unique(); }\nfn first_definer_marker_unique() {}",
+    )?;
+    fs::write(root.join("second_definer.rs"), "fn shared_name() {}")?;
+    fs::write(
+        root.join("caller_of_shared.rs"),
+        "fn caller_of_shared_unique() { shared_name(); }",
+    )?;
+
+    cargo_bin_cmd!("amdb")
+        .current_dir(root)
+        .arg("init")
+        .arg(".")
+        .assert()
+        .success();
+
+    let conn = open_context_db(root);
+
+    let definer_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM symbols WHERE name = ?1",
+        rusqlite::params!["shared_name"],
+        |row| row.get(0),
+    )?;
+    assert_eq!(definer_count, 2);
+
+    let callee: String = conn.query_row(
+        "SELECT callee FROM relationships WHERE caller = ?1",
+        rusqlite::params!["caller_of_shared_unique"],
+        |row| row.get(0),
+    )?;
+    assert_eq!(callee, "shared_name");
+
+    let matching_files: i64 = conn.query_row(
+        "SELECT COUNT(DISTINCT file_path) FROM symbols WHERE name = ?1",
+        rusqlite::params!["shared_name"],
+        |row| row.get(0),
+    )?;
+    assert_eq!(
+        matching_files, 2,
+        "callee identity for a same-named symbol in {} files is inherently ambiguous with the current String-only callee representation",
+        matching_files
+    );
 
     Ok(())
 }
