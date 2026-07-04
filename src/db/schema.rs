@@ -1,6 +1,8 @@
 use rusqlite::{Connection, Result};
 
-pub fn init(conn: &Connection) -> Result<()> {
+const CURRENT_SCHEMA_VERSION: i32 = 2;
+
+pub fn init(conn: &Connection) -> Result<bool> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS symbols (
             id INTEGER PRIMARY KEY,
@@ -76,5 +78,15 @@ pub fn init(conn: &Connection) -> Result<()> {
         Err(e) => return Err(e),
     }
 
-    Ok(())
+    let version: i32 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+
+    let migrated = if version < CURRENT_SCHEMA_VERSION {
+        conn.execute("DELETE FROM relationships", [])?;
+        conn.execute_batch(&format!("PRAGMA user_version = {}", CURRENT_SCHEMA_VERSION))?;
+        true
+    } else {
+        false
+    };
+
+    Ok(migrated)
 }

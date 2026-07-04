@@ -1,19 +1,19 @@
-use std::collections::{HashMap, HashSet};
+use crate::core::symbol::SymbolRef;
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Node {
-    pub file: String,
-    pub name: String,
+    pub sym: SymbolRef,
     pub kind: String,
     pub line: usize,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DependencyGraph {
-    pub nodes: HashMap<String, Node>,
-    pub edges: HashMap<String, HashSet<String>>,
-    pub reverse_edges: HashMap<String, HashSet<String>>,
+    pub nodes: HashMap<SymbolRef, Node>,
+    pub edges: HashMap<SymbolRef, HashSet<String>>,
+    pub reverse_edges: HashMap<String, HashSet<SymbolRef>>,
 }
 
 impl DependencyGraph {
@@ -27,31 +27,33 @@ impl DependencyGraph {
 
     #[allow(dead_code)]
     pub fn add_node(&mut self, file: &str, name: &str, kind: &str, line: usize) {
-        let key = format!("{}::{}", file, name);
-        self.nodes.insert(key, Node {
-            file: file.to_string(),
-            name: name.to_string(),
-            kind: kind.to_string(),
-            line,
-        });
+        let sym = SymbolRef::new(file, name);
+        self.nodes.insert(
+            sym.clone(),
+            Node {
+                sym,
+                kind: kind.to_string(),
+                line,
+            },
+        );
     }
 
     pub fn add_edge(&mut self, file: &str, caller: &str, callee: &str) {
-        let key = format!("{}::{}", file, caller);
+        let sym = SymbolRef::new(file, caller);
         self.edges
-            .entry(key.clone())
+            .entry(sym.clone())
             .or_default()
             .insert(callee.to_string());
         self.reverse_edges
             .entry(callee.to_string())
             .or_default()
-            .insert(key);
+            .insert(sym);
     }
 
     #[allow(dead_code)]
     pub fn debug_print(&self) {
         for (caller, callees) in &self.edges {
-            println!("{} calls:", caller);
+            println!("{} calls:", caller.to_key());
             for callee in callees {
                 println!("  -> {}", callee);
             }

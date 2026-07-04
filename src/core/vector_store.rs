@@ -6,13 +6,21 @@ use std::cmp::Ordering;
 use std::path::Path;
 use std::collections::HashSet;
 use crate::core::graph::DependencyGraph;
+use crate::core::symbol::SymbolRef;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VectorRecord {
     pub id: String,
     pub file_path: String,
+    pub name: String,
     pub text: String,
     pub vector: Vec<f32>,
+}
+
+impl VectorRecord {
+    pub fn symbol(&self) -> SymbolRef {
+        SymbolRef::new(self.file_path.clone(), self.name.clone())
+    }
 }
 
 pub struct VectorStore {
@@ -33,6 +41,7 @@ impl VectorStore {
             "CREATE TABLE IF NOT EXISTS vectors (
                 id TEXT PRIMARY KEY,
                 file_path TEXT NOT NULL,
+                name TEXT NOT NULL DEFAULT '',
                 text TEXT NOT NULL,
                 vector BLOB NOT NULL
             )",
@@ -47,6 +56,15 @@ impl VectorStore {
              PRAGMA synchronous = NORMAL;",
         )?;
 
+        let had_name_column = conn
+            .prepare("SELECT name FROM vectors LIMIT 1")
+            .is_ok();
+
+        if !had_name_column {
+            conn.execute("ALTER TABLE vectors ADD COLUMN name TEXT NOT NULL DEFAULT ''", [])?;
+            conn.execute("DELETE FROM vectors", [])?;
+        }
+
         Ok(Self { conn })
     }
 
@@ -60,18 +78,13 @@ impl VectorStore {
         Ok(())
     }
 
-    pub fn add(
-        &mut self,
-        file_path: String,
-        id: String,
-        text: String,
-        vector: Vec<f32>,
-    ) -> Result<()> {
+    pub fn add(&mut self, sym: &SymbolRef, text: String, vector: Vec<f32>) -> Result<()> {
         let vector_blob = bincode::serialize(&vector)?;
+        let id = sym.to_key();
 
         self.conn.execute(
-            "INSERT OR REPLACE INTO vectors (id, file_path, text, vector) VALUES (?1, ?2, ?3, ?4)",
-            params![id, file_path, text, vector_blob],
+            "INSERT OR REPLACE INTO vectors (id, file_path, name, text, vector) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![id, sym.file, sym.name, text, vector_blob],
         )?;
         Ok(())
     }
@@ -85,7 +98,7 @@ impl VectorStore {
     }
 
     pub fn search(&self, query_vec: &[f32], limit: usize, graph: Option<&DependencyGraph>) -> Result<Vec<(f64, VectorRecord)>> {
-        let mut stmt = self.conn.prepare("SELECT id, file_path, text, vector FROM vectors")?;
+        let mut stmt = self.conn.prepare("SELECT id, file_path, name, text, vector FROM vectors")?;
 
         let mut rows = stmt.query([])?;
         let mut records = Vec::new();
@@ -93,18 +106,19 @@ impl VectorStore {
         while let Some(row) = rows.next()? {
             let id: String = row.get(0)?;
             let file_path: String = row.get(1)?;
-            let text: String = row.get(2)?;
-            let vector_blob: Vec<u8> = row.get(3)?;
-            records.push((id, file_path, text, vector_blob));
+            let name: String = row.get(2)?;
+            let text: String = row.get(3)?;
+            let vector_blob: Vec<u8> = row.get(4)?;
+            records.push((id, file_path, name, text, vector_blob));
         }
 
         let mut evaluated: Vec<SearchCandidate> = records.into_par_iter()
-            .filter_map(|(id, file_path, text, vector_blob)| {
+            .filter_map(|(id, file_path, name, text, vector_blob)| {
                 if let Ok(vector) = bincode::deserialize::<Vec<f32>>(&vector_blob) {
                     let score = cosine_similarity(query_vec, &vector);
                     Some(SearchCandidate {
                         score,
-                        record: VectorRecord { id, file_path, text, vector }
+                        record: VectorRecord { id, file_path, name, text, vector }
                     })
                 } else {
                     None
@@ -115,22 +129,20 @@ impl VectorStore {
         if let Some(g) = graph {
             evaluated.sort_unstable_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
 
-            let mut top_ids = HashSet::new();
+            let mut top_syms = HashSet::new();
             let mut top_names = HashSet::new();
 
             for (i, cand) in evaluated.iter().enumerate() {
                 if i >= 5 { break; }
-                top_ids.insert(cand.record.id.clone());
-                if let Some(name) = cand.record.id.split("::").nth(1) {
-                    top_names.insert(name.to_string());
-                }
+                top_syms.insert(cand.record.symbol());
+                top_names.insert(cand.record.name.clone());
             }
 
             for cand in evaluated.iter_mut() {
                 let mut boost = 0.0;
-                let id = &cand.record.id;
+                let sym = cand.record.symbol();
 
-                if let Some(callees) = g.edges.get(id) {
+                if let Some(callees) = g.edges.get(&sym) {
                     for callee in callees {
                         if top_names.contains(callee) {
                             boost += 0.2;
@@ -138,12 +150,10 @@ impl VectorStore {
                     }
                 }
 
-                if let Some(name) = id.split("::").nth(1) {
-                    if let Some(callers) = g.reverse_edges.get(name) {
-                        for caller in callers {
-                            if top_ids.contains(caller) {
-                                boost += 0.2;
-                            }
+                if let Some(callers) = g.reverse_edges.get(&sym.name) {
+                    for caller in callers {
+                        if top_syms.contains(caller) {
+                            boost += 0.2;
                         }
                     }
                 }

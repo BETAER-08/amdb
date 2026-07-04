@@ -3,6 +3,7 @@ use crate::core::embedding::EmbeddingEngine;
 use crate::core::graph::DependencyGraph;
 use crate::core::languages::SupportedLanguage;
 use crate::core::parser::{CodeParser, CodeSymbol, CodeWarning};
+use crate::core::symbol::{normalize_path, SymbolRef};
 use crate::core::vector_store::VectorStore;
 use crate::db::ContextDb;
 use anyhow::Result;
@@ -20,10 +21,11 @@ struct FileIndexData {
     symbols: Vec<CodeSymbol>,
     graph: DependencyGraph,
     warnings: Vec<CodeWarning>,
-    vectors: Vec<(String, String, Vec<f32>)>,
+    vectors: Vec<(SymbolRef, String, Vec<f32>)>,
 }
 
 pub struct IndexWorker {
+    root: String,
     db: ContextDb,
     vector_store: VectorStore,
     embedder: EmbeddingEngine,
@@ -37,10 +39,14 @@ impl IndexWorker {
         let vector_path = db_dir.join("vector");
 
         let db = ContextDb::open(&db_dir)?;
+        if db.needs_reindex {
+            warn!("Legacy schema detected; run 'amdb init' again for a full rebuild of relationship data.");
+        }
         let vector_store = VectorStore::open(&vector_path)?;
         let embedder = EmbeddingEngine::new()?;
 
         Ok(Self {
+            root: root.to_string(),
             db,
             vector_store,
             embedder,
@@ -51,9 +57,11 @@ impl IndexWorker {
     pub fn update_file(&mut self, path: &str) -> Result<()> {
         use anyhow::Context;
 
-        self.vector_store.remove_by_file(path)?;
-
         let path_obj = Path::new(path);
+        let stored_path = normalize_path(&self.root, path_obj);
+
+        self.vector_store.remove_by_file(&stored_path)?;
+
         if !path_obj.exists() {
             return Ok(());
         }
@@ -70,17 +78,17 @@ impl IndexWorker {
             .with_context(|| format!("Failed to read file {}", path))?;
 
         let (symbols, graph, _, warnings) = parser
-            .parse(path, &code)
+            .parse(&stored_path, &code)
             .with_context(|| format!("Failed to parse {}", path))?;
 
-        self.db.save_symbols(path, &symbols)?;
-        self.db.save_relationships(path, &graph)?;
-        self.db.save_warnings(path, &warnings)?;
+        self.db.save_symbols(&stored_path, &symbols)?;
+        self.db.save_relationships(&stored_path, &graph)?;
+        self.db.save_warnings(&stored_path, &warnings)?;
 
         for symbol in &symbols {
             let text = format!(
                 "File: {}\nName: {}\nKind: {}\nDoc: {}\nSignature: {}",
-                path,
+                stored_path,
                 symbol.name,
                 symbol.kind,
                 symbol.docstring.clone().unwrap_or_default(),
@@ -88,8 +96,8 @@ impl IndexWorker {
             );
             match self.embedder.embed(&text) {
                 Ok(embedding) => {
-                    let id = format!("{}::{}", path, symbol.name);
-                    if let Err(e) = self.vector_store.add(path.to_string(), id, text, embedding) {
+                    let sym = SymbolRef::new(stored_path.clone(), symbol.name.clone());
+                    if let Err(e) = self.vector_store.add(&sym, text, embedding) {
                         warn!("Failed to add vector for {}: {}", symbol.name, e);
                     }
                 }
@@ -102,8 +110,9 @@ impl IndexWorker {
     }
 
     pub fn remove_file(&mut self, path: &str) -> Result<()> {
-        self.db.remove_file_data(path)?;
-        self.vector_store.remove_by_file(path)?;
+        let stored_path = normalize_path(&self.root, Path::new(path));
+        self.db.remove_file_data(&stored_path)?;
+        self.vector_store.remove_by_file(&stored_path)?;
         self.vector_store.save(&self.vector_path)?;
         Ok(())
     }
@@ -118,6 +127,9 @@ impl Indexer {
         fs::create_dir_all(&vector_path)?;
 
         let mut db = ContextDb::open(&db_dir)?;
+        if db.needs_reindex {
+            info!("Legacy schema detected; rebuilding relationship data from this scan.");
+        }
         let mut vector_store = VectorStore::open(&vector_path)?;
 
         let embedder = Arc::new(EmbeddingEngine::new()?);
@@ -147,7 +159,7 @@ impl Indexer {
             .par_iter()
             .filter_map(|entry| {
                 let path = entry.path();
-                let path_str = path.to_string_lossy().to_string();
+                let stored_path = normalize_path(root, path);
 
                 let lang = match SupportedLanguage::from_path(path) {
                     Some(l) => l,
@@ -157,7 +169,7 @@ impl Indexer {
                 let mut parser = match CodeParser::new(lang) {
                     Ok(p) => p,
                     Err(e) => {
-                        warn!("Failed to initialize parser for {}: {}", path_str, e);
+                        warn!("Failed to initialize parser for {}: {}", stored_path, e);
                         return None;
                     }
                 };
@@ -165,19 +177,19 @@ impl Indexer {
                 let code = match fs::read_to_string(path) {
                     Ok(c) => c,
                     Err(e) => {
-                        warn!("Failed to read file {}: {}", path_str, e);
+                        warn!("Failed to read file {}: {}", stored_path, e);
                         return None;
                     }
                 };
 
-                match parser.parse(&path_str, &code) {
+                match parser.parse(&stored_path, &code) {
                     Ok((symbols, graph, _, warnings)) => {
                         let mut vectors = Vec::new();
 
                         for symbol in &symbols {
                             let text = format!(
                                 "File: {}\nName: {}\nKind: {}\nDoc: {}\nSignature: {}",
-                                path_str,
+                                stored_path,
                                 symbol.name,
                                 symbol.kind,
                                 symbol.docstring.clone().unwrap_or_default(),
@@ -186,17 +198,17 @@ impl Indexer {
 
                             match embedder.embed(&text) {
                                 Ok(embedding) => {
-                                    let id = format!("{}::{}", path_str, symbol.name);
-                                    vectors.push((id, text, embedding));
+                                    let sym = SymbolRef::new(stored_path.clone(), symbol.name.clone());
+                                    vectors.push((sym, text, embedding));
                                 }
-                                Err(e) => warn!("Failed to embed symbol {} in {}: {}", symbol.name, path_str, e),
+                                Err(e) => warn!("Failed to embed symbol {} in {}: {}", symbol.name, stored_path, e),
                             }
                         }
 
-                        debug!("Parsed: {}", path_str);
+                        debug!("Parsed: {}", stored_path);
 
                         Some(FileIndexData {
-                            path: path_str,
+                            path: stored_path,
                             symbols,
                             graph,
                             warnings,
@@ -204,7 +216,7 @@ impl Indexer {
                         })
                     }
                     Err(e) => {
-                        warn!("Failed to parse {}: {}", path_str, e);
+                        warn!("Failed to parse {}: {}", stored_path, e);
                         None
                     }
                 }
@@ -227,8 +239,8 @@ impl Indexer {
                 }
             }
 
-            for (id, text, vector) in data.vectors {
-                if let Err(e) = vector_store.add(data.path.clone(), id, text, vector) {
+            for (sym, text, vector) in data.vectors {
+                if let Err(e) = vector_store.add(&sym, text, vector) {
                     error!("Failed to add vector for {}: {}", data.path, e);
                 }
             }

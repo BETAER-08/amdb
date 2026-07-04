@@ -5,6 +5,7 @@ use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
 use crate::core::embedding::EmbeddingEngine;
+use crate::core::symbol::SymbolRef;
 use crate::core::vector_store::VectorStore;
 use crate::db::ContextDb;
 
@@ -55,12 +56,11 @@ impl ContextGenerator {
             } else {
                 let mut file_graph: HashMap<String, HashSet<String>> = HashMap::new();
                 for edge in &all_edges {
-                    if let Some(caller_file) = edge.caller.split("::").next() {
-                        if let Some(callee_files) = symbol_to_files.get(&edge.callee) {
-                            for callee_file in callee_files {
-                                if caller_file != callee_file {
-                                    file_graph.entry(caller_file.to_string()).or_default().insert(callee_file.clone());
-                                }
+                    let caller_file = &edge.caller.file;
+                    if let Some(callee_files) = symbol_to_files.get(&edge.callee) {
+                        for callee_file in callee_files {
+                            if caller_file != callee_file {
+                                file_graph.entry(caller_file.clone()).or_default().insert(callee_file.clone());
                             }
                         }
                     }
@@ -73,7 +73,7 @@ impl ContextGenerator {
             target_files = all_files;
         }
 
-        let mapped_edges: Vec<(&str, &str)> = all_edges.iter().map(|e| (e.caller.as_str(), e.callee.as_str())).collect();
+        let mapped_edges: Vec<(&SymbolRef, &str)> = all_edges.iter().map(|e| (&e.caller, e.callee.as_str())).collect();
 
         let content = Self::format_markdown_report(
             &db,
@@ -167,7 +167,7 @@ impl ContextGenerator {
     fn format_markdown_report(
         db: &ContextDb,
         target_files: &[String],
-        edges: &[(&str, &str)],
+        edges: &[(&SymbolRef, &str)],
         symbol_to_files: &HashMap<String, Vec<String>>,
         focus_query: Option<&str>,
         output_filename: &str,
@@ -207,13 +207,9 @@ impl ContextGenerator {
         let target_files_set: HashSet<&String> = target_files.iter().collect();
         let is_focus = focus_query.is_some();
 
-        let relevant_edges: Vec<(&str, &str)> = edges
+        let relevant_edges: Vec<(&SymbolRef, &str)> = edges
             .iter()
-            .filter(|(caller, _)| {
-                caller.split("::").next()
-                    .map(|f| target_files_set.contains(&f.to_string()))
-                    .unwrap_or(false)
-            })
+            .filter(|(caller, _)| target_files_set.contains(&caller.file))
             .copied()
             .collect();
 
@@ -241,7 +237,7 @@ impl ContextGenerator {
             }
 
             if include_edge {
-                let safe_caller = caller.replace("::", "_").replace(".", "_").replace("/", "_").replace("\\", "_");
+                let safe_caller = caller.to_key().replace("::", "_").replace(".", "_").replace("/", "_").replace("\\", "_");
                 let safe_callee = callee.replace("::", "_").replace(".", "_").replace("/", "_").replace("\\", "_");
                 if safe_caller != safe_callee {
                     content.push_str(&format!("    {} --> {};\n", safe_caller, safe_callee));

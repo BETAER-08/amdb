@@ -1,15 +1,17 @@
 use crate::core::parser::{CodeSymbol, CodeWarning};
+use crate::core::symbol::SymbolRef;
 use crate::db::schema;
 use rusqlite::{params, Connection, Result};
 use std::path::Path;
 
 pub struct Relationship {
-    pub caller: String,
+    pub caller: SymbolRef,
     pub callee: String,
 }
 
 pub struct ContextDb {
     conn: Connection,
+    pub needs_reindex: bool,
 }
 
 impl ContextDb {
@@ -17,9 +19,9 @@ impl ContextDb {
         let db_path = path.join("context.db");
         let conn = Connection::open(db_path)?;
 
-        schema::init(&conn)?;
+        let needs_reindex = schema::init(&conn)?;
 
-        Ok(Self { conn })
+        Ok(Self { conn, needs_reindex })
     }
 
     pub fn save_symbols(&mut self, file_path: &str, symbols: &[CodeSymbol]) -> Result<()> {
@@ -67,7 +69,7 @@ impl ContextDb {
 
             for (caller, callees) in &graph.edges {
                 for callee in callees {
-                    stmt.execute(params![file_path, caller, callee])?;
+                    stmt.execute(params![file_path, caller.name, callee])?;
                 }
             }
         }
@@ -136,11 +138,13 @@ impl ContextDb {
     pub fn get_relationships(&self, file_path: &str) -> Result<Vec<Relationship>> {
         let mut stmt = self
             .conn
-            .prepare("SELECT caller, callee FROM relationships WHERE file_path = ?1")?;
+            .prepare("SELECT file_path, caller, callee FROM relationships WHERE file_path = ?1")?;
         let rows = stmt.query_map(params![file_path], |row| {
+            let file: String = row.get(0)?;
+            let caller: String = row.get(1)?;
             Ok(Relationship {
-                caller: row.get(0)?,
-                callee: row.get(1)?,
+                caller: SymbolRef::new(file, caller),
+                callee: row.get(2)?,
             })
         })?;
 
@@ -187,11 +191,13 @@ impl ContextDb {
     pub fn get_all_relationships(&self) -> Result<Vec<Relationship>> {
         let mut stmt = self
             .conn
-            .prepare("SELECT caller, callee FROM relationships")?;
+            .prepare("SELECT file_path, caller, callee FROM relationships")?;
         let rows = stmt.query_map([], |row| {
+            let file: String = row.get(0)?;
+            let caller: String = row.get(1)?;
             Ok(Relationship {
-                caller: row.get(0)?,
-                callee: row.get(1)?,
+                caller: SymbolRef::new(file, caller),
+                callee: row.get(2)?,
             })
         })?;
 

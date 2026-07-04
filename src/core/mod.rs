@@ -5,4 +5,5 @@ pub mod graph;
 pub mod indexer;
 pub mod languages;
 pub mod parser;
+pub mod symbol;
 pub mod vector_store;
