@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.7.1] - 2026-07-05
+
+### Fixed
+- Mermaid node IDs were asymmetric: a caller's ID was sanitized from its full `file::name`
+  form while the same symbol's ID as a callee was sanitized from the bare name alone, so a
+  symbol appearing on both sides of a call chain got two different node IDs and the rendered
+  graph looked disconnected even where a real edge existed. Both sides now go through one
+  `sanitize_mermaid_id(name)` rule applied to the bare symbol name
+- `schema::init`'s `ALTER TABLE ADD COLUMN` migration caught every `SqliteFailure`, not just
+  "duplicate column name" — any other structural failure at that point would have been
+  silently swallowed. Narrowed to `is_duplicate_column_error`, which matches on the specific
+  message text
+- The pre-0.7 migration purged only the `relationships` table; a legacy `symbols` row (stale
+  `line`, always-false `is_public`) survived until its file was re-touched. The migration now
+  also purges `symbols`, consistent with how `relationships` was already handled
+
+### Added
+- Five strict regression tests: mermaid node-ID symmetry, a migration-error classifier test
+  pair (duplicate vs. genuinely different `SqliteFailure`), and a legacy-DB test proving stale
+  `symbols` rows no longer survive a migration
+
+### Investigated, not changed
+- Callee edges are still recorded as a raw name (`graph.edges: HashMap<SymbolRef, HashSet<String>>`),
+  never resolved to the defining file. This is confirmed, by-design behavior, not a regression
+  from 0.7.0 — `test_ambiguous_callee_resolution_is_pinned` documents it with two same-named
+  symbols in different files. A cross-file symbol resolver is deferred to v0.8.0
+- `impl_item` signature extraction was suspected to swallow the entire method block; verified
+  against the real tree-sitter-rust grammar that `signature_before_body` already cuts at the
+  `body` field correctly for `function_item`, `struct_item` and `impl_item` alike (they all use
+  the field name `body`). No change made
+
 ## [0.7.0] - 2026-07-05
 
 ### Fixed

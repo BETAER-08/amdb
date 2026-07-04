@@ -1,6 +1,6 @@
 [package]
 name = "amdb"
-version = "0.7.0"
+version = "0.7.1"
 edition = "2021"
 description = "Turn your codebase into AI context. A high-performance context generator for LLMs (Cursor, Claude) using Tree-sitter and Vector Search."
 license = "MIT"
