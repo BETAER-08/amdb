@@ -68,13 +68,13 @@ pub fn init(conn: &Connection) -> Result<bool> {
         [],
     ) {
         Ok(_) => {}
-        Err(rusqlite::Error::SqliteFailure(_, _)) => {}
+        Err(e) if is_duplicate_column_error(&e) => {}
         Err(e) => return Err(e),
     }
 
     match conn.execute("ALTER TABLE symbols ADD COLUMN signature TEXT", []) {
         Ok(_) => {}
-        Err(rusqlite::Error::SqliteFailure(_, _)) => {}
+        Err(e) if is_duplicate_column_error(&e) => {}
         Err(e) => return Err(e),
     }
 
@@ -82,6 +82,7 @@ pub fn init(conn: &Connection) -> Result<bool> {
 
     let migrated = if version < CURRENT_SCHEMA_VERSION {
         conn.execute("DELETE FROM relationships", [])?;
+        conn.execute("DELETE FROM symbols", [])?;
         conn.execute_batch(&format!("PRAGMA user_version = {}", CURRENT_SCHEMA_VERSION))?;
         true
     } else {
@@ -89,4 +90,87 @@ pub fn init(conn: &Connection) -> Result<bool> {
     };
 
     Ok(migrated)
+}
+
+fn is_duplicate_column_error(err: &rusqlite::Error) -> bool {
+    matches!(
+        err,
+        rusqlite::Error::SqliteFailure(_, Some(msg)) if msg.starts_with("duplicate column name")
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fresh_db_migrates_once() {
+        let conn = Connection::open_in_memory().unwrap();
+        assert!(init(&conn).unwrap());
+        assert!(!init(&conn).unwrap());
+    }
+
+    #[test]
+    fn duplicate_column_error_is_recognized() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute("CREATE TABLE probe (id INTEGER PRIMARY KEY, x INTEGER)", [])
+            .unwrap();
+        let err = conn
+            .execute("ALTER TABLE probe ADD COLUMN x INTEGER", [])
+            .unwrap_err();
+        assert!(is_duplicate_column_error(&err));
+    }
+
+    #[test]
+    fn non_duplicate_error_is_not_swallowed() {
+        let conn = Connection::open_in_memory().unwrap();
+        let err = conn
+            .execute("SELECT * FROM nonexistent_table_xyz", [])
+            .unwrap_err();
+        assert!(!is_duplicate_column_error(&err));
+    }
+
+    #[test]
+    fn legacy_db_purges_stale_symbols_on_migration() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute(
+            "CREATE TABLE symbols (
+                id INTEGER PRIMARY KEY,
+                file_path TEXT NOT NULL,
+                name TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                line INTEGER NOT NULL,
+                docstring TEXT,
+                is_public INTEGER NOT NULL DEFAULT 1,
+                signature TEXT
+            )",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "CREATE TABLE relationships (
+                id INTEGER PRIMARY KEY,
+                file_path TEXT NOT NULL,
+                caller TEXT NOT NULL,
+                callee TEXT NOT NULL
+            )",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO symbols (file_path, name, kind, line, docstring, is_public, signature)
+             VALUES ('legacy.rs', 'stale_unique_sym', 'Function', 999, NULL, 0, NULL)",
+            [],
+        )
+        .unwrap();
+        conn.execute_batch("PRAGMA user_version = 1;").unwrap();
+
+        let migrated = init(&conn).unwrap();
+        assert!(migrated);
+
+        let remaining: i64 = conn
+            .query_row("SELECT COUNT(*) FROM symbols", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(remaining, 0);
+    }
 }
