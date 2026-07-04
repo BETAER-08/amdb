@@ -1,8 +1,12 @@
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
-use std::env;
+use rusqlite::Connection;
 use std::fs;
 use tempfile::TempDir;
+
+fn open_context_db(root: &std::path::Path) -> Connection {
+    Connection::open(root.join(".database/context.db")).expect("open context.db")
+}
 
 #[test]
 fn test_end_to_end_workflow() -> Result<(), Box<dyn std::error::Error>> {
@@ -225,13 +229,14 @@ fn test_depth_control_integration() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
 #[test]
 fn test_directional_graph_excludes_callers() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = TempDir::new()?;
     let root = temp_dir.path();
 
-    std::fs::write(root.join("def.rs"), "fn target_func() {}")?;
-    std::fs::write(root.join("user.rs"), "fn caller() { target_func(); }")?;
+    std::fs::write(root.join("def.rs"), "fn probe_alpha_unique_fn() {}")?;
+    std::fs::write(root.join("user.rs"), "fn probe_caller_unique_fn() { probe_alpha_unique_fn(); }")?;
 
     let mut cmd_init = cargo_bin_cmd!("amdb");
     cmd_init.current_dir(root).arg("init").arg(".").assert().success();
@@ -239,11 +244,11 @@ fn test_directional_graph_excludes_callers() -> Result<(), Box<dyn std::error::E
     let mut cmd_gen = cargo_bin_cmd!("amdb");
     cmd_gen.current_dir(root)
         .arg("generate")
-        .arg("--focus").arg("target_func")
+        .arg("--focus").arg("probe_alpha_unique_fn")
         .arg("--depth").arg("1")
         .assert().success();
 
-    let content = std::fs::read_to_string(root.join(".amdb/target_func.md"))?;
+    let content = std::fs::read_to_string(root.join(".amdb/probe_alpha_unique_fn.md"))?;
     assert!(content.contains("def.rs"));
     assert!(!content.contains("user.rs"));
 
@@ -252,7 +257,6 @@ fn test_directional_graph_excludes_callers() -> Result<(), Box<dyn std::error::E
 
 #[test]
 fn test_symbol_fields_persisted() -> Result<(), Box<dyn std::error::Error>> {
-    use tempfile::TempDir;
     let temp_dir = TempDir::new()?;
     let root = temp_dir.path();
 
@@ -273,7 +277,6 @@ fn test_symbol_fields_persisted() -> Result<(), Box<dyn std::error::Error>> {
 
 #[test]
 fn test_vector_store_save_no_panic() -> Result<(), Box<dyn std::error::Error>> {
-    use tempfile::TempDir;
     let temp_dir = TempDir::new()?;
     let root = temp_dir.path();
 
@@ -288,7 +291,6 @@ fn test_vector_store_save_no_panic() -> Result<(), Box<dyn std::error::Error>> {
 
 #[test]
 fn test_depth_directional_no_reverse() -> Result<(), Box<dyn std::error::Error>> {
-    use tempfile::TempDir;
     let temp_dir = TempDir::new()?;
     let root = temp_dir.path();
 
@@ -309,6 +311,179 @@ fn test_depth_directional_no_reverse() -> Result<(), Box<dyn std::error::Error>>
     let content = std::fs::read_to_string(root.join(".amdb/unique_core_fn.md"))?;
     assert!(content.contains("core_impl.rs"));
     assert!(!content.contains("unrelated.rs"));
+
+    Ok(())
+}
+
+#[test]
+fn test_symbol_line_number_is_exact() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = TempDir::new()?;
+    let root = temp_dir.path();
+
+    fs::write(
+        root.join("line_position_check.rs"),
+        "\n\n\nfn line_check_unique_fn() {\n    ()\n}\n",
+    )?;
+
+    cargo_bin_cmd!("amdb")
+        .current_dir(root)
+        .arg("init")
+        .arg(".")
+        .assert()
+        .success();
+
+    let conn = open_context_db(root);
+    let line: i64 = conn.query_row(
+        "SELECT line FROM symbols WHERE name = ?1",
+        rusqlite::params!["line_check_unique_fn"],
+        |row| row.get(0),
+    )?;
+
+    assert_eq!(line, 4);
+    Ok(())
+}
+
+#[test]
+fn test_is_public_reflects_visibility() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = TempDir::new()?;
+    let root = temp_dir.path();
+
+    fs::write(
+        root.join("visibility_check.rs"),
+        "pub fn alpha_unique_sym() {}\nfn beta_unique_sym() {}\n",
+    )?;
+
+    cargo_bin_cmd!("amdb")
+        .current_dir(root)
+        .arg("init")
+        .arg(".")
+        .assert()
+        .success();
+
+    let conn = open_context_db(root);
+
+    let alpha_is_public: i64 = conn.query_row(
+        "SELECT is_public FROM symbols WHERE name = ?1",
+        rusqlite::params!["alpha_unique_sym"],
+        |row| row.get(0),
+    )?;
+    let beta_is_public: i64 = conn.query_row(
+        "SELECT is_public FROM symbols WHERE name = ?1",
+        rusqlite::params!["beta_unique_sym"],
+        |row| row.get(0),
+    )?;
+
+    assert_eq!(alpha_is_public, 1);
+    assert_eq!(beta_is_public, 0);
+    Ok(())
+}
+
+#[test]
+fn test_signature_round_trip_excludes_body() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = TempDir::new()?;
+    let root = temp_dir.path();
+
+    fs::write(
+        root.join("signature_check.rs"),
+        "pub fn sig_check_unique_fn(x: i32, y: i32) -> i32 {\n    let leaked_body_marker = 12345;\n    x + y + leaked_body_marker\n}\n",
+    )?;
+
+    cargo_bin_cmd!("amdb")
+        .current_dir(root)
+        .arg("init")
+        .arg(".")
+        .assert()
+        .success();
+
+    let conn = open_context_db(root);
+    let signature: String = conn.query_row(
+        "SELECT signature FROM symbols WHERE name = ?1",
+        rusqlite::params!["sig_check_unique_fn"],
+        |row| row.get(0),
+    )?;
+
+    assert!(signature.contains("x: i32, y: i32"));
+    assert!(signature.contains("-> i32"));
+    assert!(!signature.contains("leaked_body_marker"));
+    Ok(())
+}
+
+#[test]
+fn test_mermaid_graph_contains_cross_file_edge() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = TempDir::new()?;
+    let root = temp_dir.path();
+
+    fs::write(
+        root.join("caller_module.rs"),
+        "fn alpha_unique_sym() { beta_unique_sym(); }",
+    )?;
+    fs::write(root.join("callee_module.rs"), "fn beta_unique_sym() {}")?;
+
+    cargo_bin_cmd!("amdb")
+        .current_dir(root)
+        .arg("init")
+        .arg(".")
+        .assert()
+        .success();
+
+    cargo_bin_cmd!("amdb")
+        .current_dir(root)
+        .arg("generate")
+        .assert()
+        .success();
+
+    let content = fs::read_to_string(root.join(".amdb/context.md"))?;
+    assert!(content.contains("```mermaid"));
+
+    let has_edge_arrow_between = content
+        .lines()
+        .any(|line| line.contains("-->") && line.contains("alpha_unique_sym") && line.contains("beta_unique_sym"));
+
+    assert!(
+        has_edge_arrow_between,
+        "expected a mermaid edge arrow between alpha_unique_sym and beta_unique_sym, got:\n{}",
+        content
+    );
+    Ok(())
+}
+
+#[test]
+fn test_scoped_path_call_does_not_corrupt_edge_identity() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = TempDir::new()?;
+    let root = temp_dir.path();
+
+    fs::write(
+        root.join("scoped_call_check.rs"),
+        "fn scoped_call_unique_fn() {\n    let _m: std::collections::HashMap<i32, i32> = std::collections::HashMap::new();\n}\n",
+    )?;
+
+    cargo_bin_cmd!("amdb")
+        .current_dir(root)
+        .arg("init")
+        .arg(".")
+        .assert()
+        .success();
+
+    let conn = open_context_db(root);
+    let mut stmt = conn.prepare("SELECT caller, callee FROM relationships")?;
+    let rows = stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })?;
+
+    for row in rows {
+        let (caller, callee) = row?;
+        assert!(!caller.contains("::"), "caller identity leaked a joined path: {}", caller);
+        assert!(!callee.contains("::"), "callee identity leaked a joined path: {}", callee);
+    }
+
+    cargo_bin_cmd!("amdb")
+        .current_dir(root)
+        .arg("generate")
+        .assert()
+        .success();
+
+    let content = fs::read_to_string(root.join(".amdb/context.md"))?;
+    assert!(content.contains("scoped_call_unique_fn"));
 
     Ok(())
 }
