@@ -53,6 +53,16 @@ pub struct CodeRoute {
     pub handler: Option<String>,
 }
 
+pub fn embedding_text(symbol: &CodeSymbol) -> String {
+    format!(
+        "Name: {}\nKind: {}\nDoc: {}\nSignature: {}",
+        symbol.name,
+        symbol.kind,
+        symbol.docstring.clone().unwrap_or_default(),
+        symbol.signature.clone().unwrap_or_default()
+    )
+}
+
 pub type ParseResult = (
     Vec<CodeSymbol>,
     DependencyGraph,

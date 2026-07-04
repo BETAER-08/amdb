@@ -2,7 +2,7 @@ use crate::core::config::Config;
 use crate::core::embedding::EmbeddingEngine;
 use crate::core::graph::DependencyGraph;
 use crate::core::languages::SupportedLanguage;
-use crate::core::parser::{CodeParser, CodeSymbol, CodeWarning};
+use crate::core::parser::{embedding_text, CodeParser, CodeSymbol, CodeWarning};
 use crate::core::symbol::{normalize_path, SymbolRef};
 use crate::core::vector_store::VectorStore;
 use crate::db::ContextDb;
@@ -86,14 +86,7 @@ impl IndexWorker {
         self.db.save_warnings(&stored_path, &warnings)?;
 
         for symbol in &symbols {
-            let text = format!(
-                "File: {}\nName: {}\nKind: {}\nDoc: {}\nSignature: {}",
-                stored_path,
-                symbol.name,
-                symbol.kind,
-                symbol.docstring.clone().unwrap_or_default(),
-                symbol.signature.clone().unwrap_or_default()
-            );
+            let text = embedding_text(symbol);
             match self.embedder.embed(&text) {
                 Ok(embedding) => {
                     let sym = SymbolRef::new(stored_path.clone(), symbol.name.clone());
@@ -187,14 +180,7 @@ impl Indexer {
                         let mut vectors = Vec::new();
 
                         for symbol in &symbols {
-                            let text = format!(
-                                "File: {}\nName: {}\nKind: {}\nDoc: {}\nSignature: {}",
-                                stored_path,
-                                symbol.name,
-                                symbol.kind,
-                                symbol.docstring.clone().unwrap_or_default(),
-                                symbol.signature.clone().unwrap_or_default()
-                            );
+                            let text = embedding_text(symbol);
 
                             match embedder.embed(&text) {
                                 Ok(embedding) => {

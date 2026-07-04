@@ -5,6 +5,7 @@ use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
 use crate::core::embedding::EmbeddingEngine;
+use crate::core::graph::DependencyGraph;
 use crate::core::symbol::SymbolRef;
 use crate::core::vector_store::VectorStore;
 use crate::db::ContextDb;
@@ -28,6 +29,21 @@ impl ContextGenerator {
         let db = ContextDb::open(db_dir)?;
         let all_edges = db.get_all_relationships()?;
         let all_files = db.get_all_files()?;
+
+        let mut graph = DependencyGraph::new();
+        for edge in &all_edges {
+            graph
+                .edges
+                .entry(edge.caller.clone())
+                .or_default()
+                .insert(edge.callee.clone());
+            graph
+                .reverse_edges
+                .entry(edge.callee.clone())
+                .or_default()
+                .insert(edge.caller.clone());
+        }
+
         let mut symbol_to_files: HashMap<String, Vec<String>> = HashMap::new();
 
         for file in &all_files {
@@ -48,7 +64,7 @@ impl ContextGenerator {
             println!("{}", style(format!("Filtering context for: '{}' with depth {}...", query, depth)).cyan());
 
             let embedder = EmbeddingEngine::new()?;
-            let paths = Self::resolve_focus_targets(db_dir, &all_files, &db, query, &embedder).await?;
+            let paths = Self::resolve_focus_targets(db_dir, &all_files, &db, query, &embedder, &graph).await?;
 
             if paths.is_empty() {
                 println!("{}", style("No matches found. Falling back to full context.").yellow());
@@ -98,6 +114,7 @@ impl ContextGenerator {
         db: &ContextDb,
         query: &str,
         embedder: &EmbeddingEngine,
+        graph: &DependencyGraph,
     ) -> Result<Vec<String>> {
         let mut paths = Vec::new();
 
@@ -121,7 +138,7 @@ impl ContextGenerator {
             let vector_path = db_dir.join("vector");
             let store = VectorStore::open(&vector_path)?;
             let query_vec = embedder.embed(query)?;
-            let results = store.search(&query_vec, 10, None)?;
+            let results = store.search(&query_vec, 10, Some(graph))?;
 
             if !results.is_empty() {
                 let best_dist = results[0].0;
