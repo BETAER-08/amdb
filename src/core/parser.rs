@@ -122,6 +122,7 @@ impl CodeParser {
         for m in cursor.matches(&query, tree.root_node(), code.as_bytes()) {
             let mut kind = String::new();
             let mut name = String::new();
+            let mut line = 0usize;
             let mut docstring = None;
             let mut signature = None;
             let mut is_public = false;
@@ -136,6 +137,7 @@ impl CodeParser {
                     "Function" | "Class" | "Interface" | "Method" | "Struct" => {
                         kind = capture_name.to_string();
                         name = text;
+                        line = capture.node.start_position().row + 1;
                     }
                     "Call" => {
                         if let Some(caller) = self.find_parent_function(capture.node, code) {
@@ -155,7 +157,7 @@ impl CodeParser {
                 symbols.push(CodeSymbol {
                     kind,
                     name,
-                    line: m.pattern_index,
+                    line,
                     docstring,
                     signature,
                     is_public,
