@@ -21,6 +21,12 @@ impl SymbolRef {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResolutionScope {
+    Global,
+    SameFileOnly,
+}
+
 pub struct SymbolResolver {
     by_name: HashMap<String, HashSet<String>>,
 }
@@ -39,18 +45,28 @@ impl SymbolResolver {
             .insert(file.to_string());
     }
 
-    pub fn resolve(&self, caller_file: &str, callee_name: &str) -> Option<String> {
+    pub fn resolve(
+        &self,
+        caller_file: &str,
+        callee_name: &str,
+        scope: ResolutionScope,
+    ) -> Option<String> {
         let files = self.by_name.get(callee_name)?;
 
         if files.contains(caller_file) {
             return Some(caller_file.to_string());
         }
 
-        if files.len() == 1 {
-            return files.iter().next().cloned();
+        match scope {
+            ResolutionScope::Global => {
+                if files.len() == 1 {
+                    files.iter().next().cloned()
+                } else {
+                    None
+                }
+            }
+            ResolutionScope::SameFileOnly => None,
         }
-
-        None
     }
 }
 

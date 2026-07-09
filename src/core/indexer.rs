@@ -3,7 +3,7 @@ use crate::core::embedding::EmbeddingEngine;
 use crate::core::graph::DependencyGraph;
 use crate::core::languages::SupportedLanguage;
 use crate::core::parser::{embedding_text, CodeParser, CodeSymbol, CodeWarning};
-use crate::core::symbol::{normalize_path, SymbolRef, SymbolResolver};
+use crate::core::symbol::{normalize_path, ResolutionScope, SymbolRef, SymbolResolver};
 use crate::core::vector_store::VectorStore;
 use crate::db::ContextDb;
 use anyhow::Result;
@@ -15,6 +15,35 @@ use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
 pub struct Indexer;
+
+pub fn resolve_callee_files(
+    db: &mut ContextDb,
+    files: &[(&str, &[CodeSymbol], &DependencyGraph)],
+    scope: ResolutionScope,
+) -> Result<()> {
+    let mut resolver = SymbolResolver::new();
+    for (path, symbols, _) in files {
+        for symbol in *symbols {
+            resolver.register(path, &symbol.name);
+        }
+    }
+
+    for (path, _, graph) in files {
+        let resolved: Vec<(String, String, Option<String>)> = graph
+            .edges
+            .iter()
+            .flat_map(|(caller, callees)| {
+                callees.iter().map(|callee| {
+                    let callee_file = resolver.resolve(&caller.file, callee, scope);
+                    (caller.name.clone(), callee.clone(), callee_file)
+                })
+            })
+            .collect();
+        db.update_relationship_callee_files(path, &resolved)?;
+    }
+
+    Ok(())
+}
 
 struct FileIndexData {
     path: String,
@@ -85,22 +114,11 @@ impl IndexWorker {
         self.db.save_relationships(&stored_path, &graph)?;
         self.db.save_warnings(&stored_path, &warnings)?;
 
-        let resolved: Vec<(String, String, Option<String>)> = graph
-            .edges
-            .iter()
-            .flat_map(|(caller, callees)| {
-                callees.iter().map(|callee| {
-                    let callee_file = if symbols.iter().any(|s| &s.name == callee) {
-                        Some(stored_path.clone())
-                    } else {
-                        None
-                    };
-                    (caller.name.clone(), callee.clone(), callee_file)
-                })
-            })
-            .collect();
-        self.db
-            .update_relationship_callee_files(&stored_path, &resolved)?;
+        resolve_callee_files(
+            &mut self.db,
+            &[(stored_path.as_str(), symbols.as_slice(), &graph)],
+            ResolutionScope::SameFileOnly,
+        )?;
 
         for symbol in &symbols {
             let text = embedding_text(symbol);
@@ -230,32 +248,10 @@ impl Indexer {
             })
             .collect();
 
-        let mut resolver = SymbolResolver::new();
         for data in &results {
-            for symbol in &data.symbols {
-                resolver.register(&data.path, &symbol.name);
-            }
-        }
-
-        vector_store.begin_transaction()?;
-
-        for data in results {
             db.save_symbols(&data.path, &data.symbols)?;
             db.save_relationships(&data.path, &data.graph)?;
             db.save_warnings(&data.path, &data.warnings)?;
-
-            let resolved: Vec<(String, String, Option<String>)> = data
-                .graph
-                .edges
-                .iter()
-                .flat_map(|(caller, callees)| {
-                    callees.iter().map(|callee| {
-                        let callee_file = resolver.resolve(&caller.file, callee);
-                        (caller.name.clone(), callee.clone(), callee_file)
-                    })
-                })
-                .collect();
-            db.update_relationship_callee_files(&data.path, &resolved)?;
 
             if !data.warnings.is_empty() {
                 for warning in &data.warnings {
@@ -265,7 +261,17 @@ impl Indexer {
                     );
                 }
             }
+        }
 
+        let file_data: Vec<(&str, &[CodeSymbol], &DependencyGraph)> = results
+            .iter()
+            .map(|data| (data.path.as_str(), data.symbols.as_slice(), &data.graph))
+            .collect();
+        resolve_callee_files(&mut db, &file_data, ResolutionScope::Global)?;
+
+        vector_store.begin_transaction()?;
+
+        for data in results {
             for (sym, text, vector) in data.vectors {
                 if let Err(e) = vector_store.add(&sym, text, vector) {
                     error!("Failed to add vector for {}: {}", data.path, e);
@@ -290,5 +296,83 @@ impl Indexer {
     pub fn remove_file(root: &str, path: &str) -> Result<()> {
         let mut worker = IndexWorker::new(root)?;
         worker.remove_file(path)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn make_symbol(name: &str) -> CodeSymbol {
+        CodeSymbol {
+            kind: "function".to_string(),
+            name: name.to_string(),
+            line: 1,
+            docstring: None,
+            signature: None,
+            is_public: true,
+        }
+    }
+
+    fn cross_file_callee_file(scope: ResolutionScope) -> Option<String> {
+        let dir = TempDir::new().unwrap();
+        let mut db = ContextDb::open(dir.path()).unwrap();
+
+        let definer_symbols = vec![make_symbol("target_fn")];
+        let caller_symbols = vec![make_symbol("entry_fn")];
+        let definer_graph = DependencyGraph::new();
+        let mut caller_graph = DependencyGraph::new();
+        caller_graph.add_edge("caller.rs", "entry_fn", "target_fn");
+
+        db.save_relationships("caller.rs", &caller_graph).unwrap();
+
+        resolve_callee_files(
+            &mut db,
+            &[
+                ("definer.rs", definer_symbols.as_slice(), &definer_graph),
+                ("caller.rs", caller_symbols.as_slice(), &caller_graph),
+            ],
+            scope,
+        )
+        .unwrap();
+
+        let rels = db.get_relationships("caller.rs").unwrap();
+        assert_eq!(rels.len(), 1);
+        rels[0].callee_file.clone()
+    }
+
+    #[test]
+    fn test_init_and_daemon_resolution_share_one_path() {
+        for scope in [ResolutionScope::Global, ResolutionScope::SameFileOnly] {
+            let dir = TempDir::new().unwrap();
+            let mut db = ContextDb::open(dir.path()).unwrap();
+
+            let symbols = vec![make_symbol("entry_fn"), make_symbol("local_fn")];
+            let mut graph = DependencyGraph::new();
+            graph.add_edge("caller.rs", "entry_fn", "local_fn");
+
+            db.save_relationships("caller.rs", &graph).unwrap();
+
+            resolve_callee_files(&mut db, &[("caller.rs", symbols.as_slice(), &graph)], scope)
+                .unwrap();
+
+            let rels = db.get_relationships("caller.rs").unwrap();
+            assert_eq!(rels.len(), 1);
+            assert_eq!(rels[0].callee_file.as_deref(), Some("caller.rs"));
+        }
+    }
+
+    #[test]
+    fn test_daemon_scope_does_not_apply_global_unique() {
+        assert_eq!(cross_file_callee_file(ResolutionScope::SameFileOnly), None);
+    }
+
+    #[test]
+    fn test_init_scope_applies_global_unique() {
+        assert_eq!(
+            cross_file_callee_file(ResolutionScope::Global).as_deref(),
+            Some("definer.rs")
+        );
     }
 }
