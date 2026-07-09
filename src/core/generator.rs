@@ -1,3 +1,4 @@
+use crate::core::config::Config;
 use crate::core::embedding::EmbeddingEngine;
 use crate::core::graph::DependencyGraph;
 use crate::core::symbol::SymbolRef;
@@ -14,7 +15,9 @@ pub struct ContextGenerator;
 
 impl ContextGenerator {
     pub async fn generate(focus_query: Option<String>, depth: u8) -> Result<()> {
-        let db_dir = Path::new(".database");
+        let config = Config::load(".");
+        let db_dir = config.db_dir(".");
+        let vector_path = config.vector_dir(".");
         let output_dir = Path::new(".amdb");
 
         if !output_dir.exists() {
@@ -29,7 +32,7 @@ impl ContextGenerator {
             std::process::exit(1);
         }
 
-        let db = ContextDb::open(db_dir)?;
+        let db = ContextDb::open(&db_dir)?;
         let all_edges = db.get_all_relationships()?;
         let all_files = db.get_all_files()?;
 
@@ -77,9 +80,15 @@ impl ContextGenerator {
             );
 
             let embedder = EmbeddingEngine::new()?;
-            let paths =
-                Self::resolve_focus_targets(db_dir, &all_files, &db, query, &embedder, &graph)
-                    .await?;
+            let paths = Self::resolve_focus_targets(
+                &vector_path,
+                &all_files,
+                &db,
+                query,
+                &embedder,
+                &graph,
+            )
+            .await?;
 
             if paths.is_empty() {
                 println!(
@@ -138,7 +147,7 @@ impl ContextGenerator {
     }
 
     async fn resolve_focus_targets(
-        db_dir: &Path,
+        vector_path: &Path,
         all_files: &[String],
         db: &ContextDb,
         query: &str,
@@ -166,8 +175,7 @@ impl ContextGenerator {
         }
 
         if paths.is_empty() {
-            let vector_path = db_dir.join("vector");
-            let store = VectorStore::open(&vector_path)?;
+            let store = VectorStore::open(vector_path)?;
             let query_vec = embedder.embed(query)?;
             let results = store.search(&query_vec, 10, Some(graph))?;
 

@@ -764,6 +764,42 @@ fn test_callee_file_persisted_for_unique_symbol() -> Result<(), Box<dyn std::err
 }
 
 #[test]
+fn test_all_subcommands_agree_on_custom_db_path() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = TempDir::new()?;
+    let root = temp_dir.path();
+
+    fs::write(root.join("amdb.toml"), "db_path = \".custom_shared_db\"\n")?;
+    fs::write(
+        root.join("shared_path_check.rs"),
+        "fn shared_path_unique_fn() {}",
+    )?;
+
+    cargo_bin_cmd!("amdb")
+        .current_dir(root)
+        .arg("init")
+        .arg(".")
+        .assert()
+        .success();
+
+    assert!(root.join(".custom_shared_db/context.db").exists());
+    assert!(root.join(".custom_shared_db/vector/vectors.db").exists());
+    assert!(!root.join(".database").exists());
+
+    cargo_bin_cmd!("amdb")
+        .current_dir(root)
+        .arg("generate")
+        .assert()
+        .success();
+
+    assert!(!root.join(".database").exists());
+
+    let content = fs::read_to_string(root.join(".amdb/context.md"))?;
+    assert!(content.contains("shared_path_unique_fn"));
+
+    Ok(())
+}
+
+#[test]
 fn test_ambiguous_callee_marked_unresolved_or_split() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = TempDir::new()?;
     let root = temp_dir.path();

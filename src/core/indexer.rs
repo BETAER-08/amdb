@@ -35,8 +35,8 @@ pub struct IndexWorker {
 impl IndexWorker {
     pub fn new(root: &str) -> Result<Self> {
         let config = Config::load(root);
-        let db_dir = Path::new(root).join(&config.db_path);
-        let vector_path = db_dir.join("vector");
+        let db_dir = config.db_dir(root);
+        let vector_path = config.vector_dir(root);
 
         let db = ContextDb::open(&db_dir)?;
         if db.needs_reindex {
@@ -131,8 +131,8 @@ impl IndexWorker {
 impl Indexer {
     pub fn scan_project(root: &str) -> Result<()> {
         let config = Config::load(root);
-        let db_dir = Path::new(root).join(&config.db_path);
-        let vector_path = db_dir.join("vector");
+        let db_dir = config.db_dir(root);
+        let vector_path = config.vector_dir(root);
 
         fs::create_dir_all(&vector_path)?;
 

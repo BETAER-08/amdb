@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use std::env;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
@@ -43,6 +43,14 @@ impl Config {
         }
 
         config
+    }
+
+    pub fn db_dir(&self, root: &str) -> PathBuf {
+        Path::new(root).join(&self.db_path)
+    }
+
+    pub fn vector_dir(&self, root: &str) -> PathBuf {
+        self.db_dir(root).join("vector")
     }
 }
 
