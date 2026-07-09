@@ -1,3 +1,4 @@
+use anyhow::Context;
 use clap::{Parser, Subcommand};
 use tracing::{error, info, Level};
 use tracing_subscriber::FmtSubscriber;
@@ -58,29 +59,25 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
-    match cli.command {
+    let result = match cli.command {
         Commands::Init { path } => {
             info!("Initializing amdb in: {}", path);
-            let res = tokio::task::spawn_blocking(move || Indexer::scan_project(&path)).await?;
-
-            if let Err(e) = res {
-                error!("Init failed: {}", e);
-                std::process::exit(1);
-            }
+            tokio::task::spawn_blocking(move || Indexer::scan_project(&path))
+                .await?
+                .context("Init failed")
         }
         Commands::Daemon { path } => {
             info!("Starting daemon watcher on: {}", path);
-            if let Err(e) = FileWatcher::watch(&path).await {
-                error!("Watcher error: {}", e);
-                std::process::exit(1);
-            }
+            FileWatcher::watch(&path).await.context("Watcher error")
         }
-        Commands::Generate { focus, depth } => {
-            if let Err(e) = ContextGenerator::generate(focus, depth).await {
-                error!("Generation error: {}", e);
-                std::process::exit(1);
-            }
-        }
+        Commands::Generate { focus, depth } => ContextGenerator::generate(focus, depth)
+            .await
+            .context("Generation error"),
+    };
+
+    if let Err(e) = result {
+        error!("{:#}", e);
+        std::process::exit(1);
     }
     Ok(())
 }

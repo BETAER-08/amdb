@@ -764,6 +764,57 @@ fn test_callee_file_persisted_for_unique_symbol() -> Result<(), Box<dyn std::err
 }
 
 #[test]
+fn test_generate_without_init_exits_nonzero() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = TempDir::new()?;
+
+    cargo_bin_cmd!("amdb")
+        .current_dir(temp_dir.path())
+        .arg("generate")
+        .assert()
+        .failure()
+        .code(1);
+
+    Ok(())
+}
+
+#[test]
+fn test_successful_command_exits_zero() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = TempDir::new()?;
+    fs::write(temp_dir.path().join("main.rs"), "fn main() {}")?;
+
+    cargo_bin_cmd!("amdb")
+        .current_dir(temp_dir.path())
+        .arg("init")
+        .arg(".")
+        .assert()
+        .success()
+        .code(0);
+
+    Ok(())
+}
+
+#[test]
+fn test_exit_code_visible_to_shell() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = TempDir::new()?;
+
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_amdb"))
+        .current_dir(temp_dir.path())
+        .arg("generate")
+        .output()?;
+
+    assert_eq!(output.status.code(), Some(1));
+
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(combined.contains("Database not found"));
+
+    Ok(())
+}
+
+#[test]
 fn test_all_subcommands_agree_on_custom_db_path() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = TempDir::new()?;
     let root = temp_dir.path();

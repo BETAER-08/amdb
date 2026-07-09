@@ -31,27 +31,25 @@ impl FileWatcher {
 
         let (tx, rx) = channel();
         let (worker_tx, worker_rx) = bounded::<WatcherEvent>(512);
-        let root_clone = root.to_string();
 
-        thread::spawn(move || match IndexWorker::new(&root_clone) {
-            Ok(mut worker) => {
-                info!("Worker thread initialized successfully.");
-                for event in worker_rx {
-                    match event {
-                        WatcherEvent::Update(path) => {
-                            if let Err(e) = worker.update_file(&path) {
-                                error!("Worker update error: {}", e);
-                            }
+        let mut worker = IndexWorker::new(root)?;
+        info!("Worker thread initialized successfully.");
+
+        thread::spawn(move || {
+            for event in worker_rx {
+                match event {
+                    WatcherEvent::Update(path) => {
+                        if let Err(e) = worker.update_file(&path) {
+                            error!("Worker update error: {}", e);
                         }
-                        WatcherEvent::Remove(path) => {
-                            if let Err(e) = worker.remove_file(&path) {
-                                error!("Worker remove error: {}", e);
-                            }
+                    }
+                    WatcherEvent::Remove(path) => {
+                        if let Err(e) = worker.remove_file(&path) {
+                            error!("Worker remove error: {}", e);
                         }
                     }
                 }
             }
-            Err(e) => error!("Failed to initialize worker thread: {}", e),
         });
 
         let mut watcher = RecommendedWatcher::new(tx, NotifyConfig::default())?;
