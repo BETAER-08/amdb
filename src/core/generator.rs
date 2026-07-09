@@ -3,7 +3,7 @@ use crate::core::embedding::EmbeddingEngine;
 use crate::core::graph::DependencyGraph;
 use crate::core::symbol::SymbolRef;
 use crate::core::vector_store::VectorStore;
-use crate::db::ContextDb;
+use crate::db::{ContextDb, Relationship};
 use anyhow::Result;
 use console::style;
 use std::collections::{HashMap, HashSet};
@@ -12,6 +12,13 @@ use std::io::Write;
 use std::path::Path;
 
 pub struct ContextGenerator;
+
+pub struct GraphData {
+    pub all_edges: Vec<Relationship>,
+    pub all_files: Vec<String>,
+    pub graph: DependencyGraph,
+    pub symbol_to_files: HashMap<String, Vec<String>>,
+}
 
 impl ContextGenerator {
     pub async fn generate(focus_query: Option<String>, depth: u8) -> Result<()> {
@@ -29,6 +36,66 @@ impl ContextGenerator {
         }
 
         let db = ContextDb::open(&db_dir)?;
+        let data = Self::load_graph_data(&db)?;
+
+        let target_files: Vec<String>;
+        let output_filename: String;
+
+        if let Some(query) = &focus_query {
+            output_filename = Self::focus_filename(query);
+
+            println!(
+                "{}",
+                style(format!(
+                    "Filtering context for: '{}' with depth {}...",
+                    query, depth
+                ))
+                .cyan()
+            );
+
+            match Self::compute_focus_files(&db, &vector_path, &data, query, depth, 10)? {
+                Some(files) => target_files = files,
+                None => {
+                    println!(
+                        "{}",
+                        style("No matches found. Falling back to full context.").yellow()
+                    );
+                    target_files = data.all_files.clone();
+                }
+            }
+        } else {
+            output_filename = "context.md".to_string();
+            println!("{}", style("Generating full project context...").blue());
+            target_files = data.all_files.clone();
+        }
+
+        let content = Self::render_report(
+            &db,
+            &data,
+            &target_files,
+            focus_query.as_deref(),
+            &output_filename,
+        )?;
+
+        let output_path = output_dir.join(&output_filename);
+        let mut file = File::create(&output_path)?;
+        file.write_all(content.as_bytes())?;
+
+        println!(
+            "{}",
+            style(format!("Generated: {}", output_path.display()))
+                .green()
+                .bold()
+        );
+        Ok(())
+    }
+
+    pub fn focus_filename(query: &str) -> String {
+        let safe_name = query.replace(" ", "-").replace("/", "-").to_lowercase();
+        format!("{}.md", safe_name)
+    }
+
+    pub fn load_graph_data(db: &ContextDb) -> Result<GraphData> {
         let all_edges = db.get_all_relationships()?;
         let all_files = db.get_all_files()?;
 
@@ -59,96 +126,87 @@ impl ContextGenerator {
             }
         }
 
-        let target_files: Vec<String>;
-        let output_filename: String;
+        Ok(GraphData {
+            all_edges,
+            all_files,
+            graph,
+            symbol_to_files,
+        })
+    }
 
-        if let Some(query) = &focus_query {
-            let safe_name = query.replace(" ", "-").replace("/", "-").to_lowercase();
-            output_filename = format!("{}.md", safe_name);
+    pub fn compute_focus_files(
+        db: &ContextDb,
+        vector_path: &Path,
+        data: &GraphData,
+        query: &str,
+        depth: u8,
+        limit: usize,
+    ) -> Result<Option<Vec<String>>> {
+        let embedder = EmbeddingEngine::new()?;
+        let paths = Self::resolve_focus_targets(
+            vector_path,
+            &data.all_files,
+            db,
+            query,
+            &embedder,
+            &data.graph,
+            limit,
+        )?;
 
-            println!(
-                "{}",
-                style(format!(
-                    "Filtering context for: '{}' with depth {}...",
-                    query, depth
-                ))
-                .cyan()
-            );
-
-            let embedder = EmbeddingEngine::new()?;
-            let paths = Self::resolve_focus_targets(
-                &vector_path,
-                &all_files,
-                &db,
-                query,
-                &embedder,
-                &graph,
-            )
-            .await?;
-
-            if paths.is_empty() {
-                println!(
-                    "{}",
-                    style("No matches found. Falling back to full context.").yellow()
-                );
-                target_files = all_files;
-            } else {
-                let mut file_graph: HashMap<String, HashSet<String>> = HashMap::new();
-                for edge in &all_edges {
-                    let caller_file = &edge.caller.file;
-                    if let Some(callee_files) = symbol_to_files.get(&edge.callee) {
-                        for callee_file in callee_files {
-                            if caller_file != callee_file {
-                                file_graph
-                                    .entry(caller_file.clone())
-                                    .or_default()
-                                    .insert(callee_file.clone());
-                            }
-                        }
-                    }
-                }
-                target_files = Self::expand_graph_depth(paths, &file_graph, depth);
-            }
-        } else {
-            output_filename = "context.md".to_string();
-            println!("{}", style("Generating full project context...").blue());
-            target_files = all_files;
+        if paths.is_empty() {
+            return Ok(None);
         }
 
-        let mapped_edges: Vec<(&SymbolRef, &str, Option<&str>)> = all_edges
+        let mut file_graph: HashMap<String, HashSet<String>> = HashMap::new();
+        for edge in &data.all_edges {
+            let caller_file = &edge.caller.file;
+            if let Some(callee_files) = data.symbol_to_files.get(&edge.callee) {
+                for callee_file in callee_files {
+                    if caller_file != callee_file {
+                        file_graph
+                            .entry(caller_file.clone())
+                            .or_default()
+                            .insert(callee_file.clone());
+                    }
+                }
+            }
+        }
+
+        Ok(Some(Self::expand_graph_depth(paths, &file_graph, depth)))
+    }
+
+    pub fn render_report(
+        db: &ContextDb,
+        data: &GraphData,
+        target_files: &[String],
+        focus_query: Option<&str>,
+        output_filename: &str,
+    ) -> Result<String> {
+        let mapped_edges: Vec<(&SymbolRef, &str, Option<&str>)> = data
+            .all_edges
             .iter()
             .map(|e| (&e.caller, e.callee.as_str(), e.callee_file.as_deref()))
             .collect();
 
-        let content = Self::format_markdown_report(
-            &db,
-            &target_files,
+        Self::format_markdown_report(
+            db,
+            target_files,
             &mapped_edges,
-            &symbol_to_files,
-            focus_query.as_deref(),
-            &output_filename,
-        )?;
-
-        let output_path = output_dir.join(&output_filename);
-        let mut file = File::create(&output_path)?;
-        file.write_all(content.as_bytes())?;
-
-        println!(
-            "{}",
-            style(format!("Generated: {}", output_path.display()))
-                .green()
-                .bold()
-        );
-        Ok(())
+            &data.symbol_to_files,
+            focus_query,
+            output_filename,
+        )
     }
 
-    async fn resolve_focus_targets(
+    #[allow(clippy::too_many_arguments)]
+    fn resolve_focus_targets(
         vector_path: &Path,
         all_files: &[String],
         db: &ContextDb,
         query: &str,
         embedder: &EmbeddingEngine,
         graph: &DependencyGraph,
+        limit: usize,
     ) -> Result<Vec<String>> {
         let mut paths = Vec::new();
 
@@ -173,7 +231,7 @@ impl ContextGenerator {
         if paths.is_empty() {
             let store = VectorStore::open(vector_path)?;
             let query_vec = embedder.embed(query)?;
-            let results = store.search(&query_vec, 10, Some(graph))?;
+            let results = store.search(&query_vec, limit, Some(graph))?;
 
             if !results.is_empty() {
                 let best_dist = results[0].0;

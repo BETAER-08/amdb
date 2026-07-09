@@ -135,6 +135,43 @@ The daemon will:
 
 ---
 
+## 🔌 MCP Server: Plug amdb into Your AI Tools
+
+`amdb serve` exposes the local index as a [Model Context Protocol](https://modelcontextprotocol.io) server over **stdio** — no HTTP, no remote hosting, your code never leaves the machine. Any MCP-capable client (VSCode, Cursor, Claude Code, Zed) can query the index directly.
+
+Run `amdb init` first, then register the server with your client.
+
+**VSCode / Cursor** — add `.vscode/mcp.json` to your project:
+
+```json
+{
+  "servers": {
+    "amdb": {
+      "command": "amdb",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+**Claude Code**:
+
+```bash
+claude mcp add amdb -- amdb serve
+```
+
+The server exposes three tools, all reading from the pre-built local index:
+
+| Tool | What it returns |
+| :- | :- |
+| `amdb_get_context` | Full project overview: files, symbols, and the mermaid dependency graph |
+| `amdb_focus` | Context narrowed to a query via name match + semantic vector search, expanded by `depth` dependency hops |
+| `amdb_get_symbol` | Every definition of a symbol name as JSON: file, kind, line, signature, callers, and callees (with resolver-accurate files) |
+
+If no index exists the tools respond with an error asking you to run `amdb init` — the server never indexes on its own.
+
+---
+
 ## 🛠 Supported Languages
 
 `amdb` uses robust Tree-sitter parsers to fully understand the syntax and structure of:

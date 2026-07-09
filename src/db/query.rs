@@ -198,6 +198,68 @@ impl ContextDb {
         Ok(warnings)
     }
 
+    pub fn get_symbols_by_name(&self, name: &str) -> Result<Vec<(String, CodeSymbol)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT file_path, name, kind, line, docstring, is_public, signature FROM symbols WHERE name = ?1 ORDER BY file_path, line",
+        )?;
+        let rows = stmt.query_map(params![name], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                CodeSymbol {
+                    name: row.get(1)?,
+                    kind: row.get(2)?,
+                    line: row.get(3)?,
+                    docstring: row.get(4)?,
+                    is_public: row.get::<_, i64>(5).unwrap_or(1) != 0,
+                    signature: row.get(6)?,
+                },
+            ))
+        })?;
+
+        let mut symbols = Vec::new();
+        for sym in rows {
+            symbols.push(sym?);
+        }
+        Ok(symbols)
+    }
+
+    pub fn get_callers_of(&self, callee: &str, callee_file: &str) -> Result<Vec<SymbolRef>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT DISTINCT file_path, caller FROM relationships WHERE callee = ?1 AND (callee_file = ?2 OR callee_file IS NULL) ORDER BY file_path, caller",
+        )?;
+        let rows = stmt.query_map(params![callee, callee_file], |row| {
+            Ok(SymbolRef::new(
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+            ))
+        })?;
+
+        let mut callers = Vec::new();
+        for caller in rows {
+            callers.push(caller?);
+        }
+        Ok(callers)
+    }
+
+    pub fn get_callees_of(
+        &self,
+        file: &str,
+        caller: &str,
+    ) -> Result<Vec<(String, Option<String>)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT DISTINCT callee, callee_file FROM relationships WHERE file_path = ?1 AND caller = ?2 ORDER BY callee",
+        )?;
+        let rows = stmt.query_map(params![file, caller], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+        })?;
+
+        let mut callees = Vec::new();
+        for callee in rows {
+            callees.push(callee?);
+        }
+        Ok(callees)
+    }
+
     pub fn get_all_files(&self) -> Result<Vec<String>> {
         let mut stmt = self
             .conn

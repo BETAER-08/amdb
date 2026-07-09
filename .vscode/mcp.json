@@ -1,0 +1,8 @@
+{
+  "servers": {
+    "amdb": {
+      "command": "amdb",
+      "args": ["serve"]
+    }
+  }
+}

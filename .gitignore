@@ -2,7 +2,8 @@
 .amdb/*
 !.amdb/config.toml
 **/.DS_Store
-.vscode
+.vscode/*
+!.vscode/mcp.json
 .idea
 *.swp
 .amdb/

@@ -8,6 +8,107 @@ fn open_context_db(root: &std::path::Path) -> Connection {
     Connection::open(root.join(".database/context.db")).expect("open context.db")
 }
 
+struct McpClient {
+    child: std::process::Child,
+    stdin: std::process::ChildStdin,
+    rx: std::sync::mpsc::Receiver<String>,
+    next_id: i64,
+}
+
+impl McpClient {
+    fn start(dir: &std::path::Path) -> Self {
+        let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_amdb"))
+            .current_dir(dir)
+            .arg("serve")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("spawn amdb serve");
+
+        let stdin = child.stdin.take().expect("child stdin");
+        let stdout = child.stdout.take().expect("child stdout");
+        let (tx, rx) = std::sync::mpsc::channel();
+
+        std::thread::spawn(move || {
+            use std::io::BufRead;
+            let reader = std::io::BufReader::new(stdout);
+            for line in reader.lines().map_while(Result::ok) {
+                if tx.send(line).is_err() {
+                    break;
+                }
+            }
+        });
+
+        Self {
+            child,
+            stdin,
+            rx,
+            next_id: 1,
+        }
+    }
+
+    fn send(&mut self, value: serde_json::Value) {
+        use std::io::Write;
+        let mut line = value.to_string();
+        line.push('\n');
+        self.stdin.write_all(line.as_bytes()).expect("write stdin");
+        self.stdin.flush().expect("flush stdin");
+    }
+
+    fn request(&mut self, method: &str, params: serde_json::Value) -> serde_json::Value {
+        let id = self.next_id;
+        self.next_id += 1;
+        self.send(serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": method,
+            "params": params,
+        }));
+
+        loop {
+            let line = self
+                .rx
+                .recv_timeout(std::time::Duration::from_secs(120))
+                .expect("mcp response before timeout");
+            let msg: serde_json::Value = serde_json::from_str(&line).expect("valid jsonrpc line");
+            if msg.get("id").and_then(|v| v.as_i64()) == Some(id) {
+                return msg;
+            }
+        }
+    }
+
+    fn initialize(&mut self) -> serde_json::Value {
+        let resp = self.request(
+            "initialize",
+            serde_json::json!({
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": {"name": "amdb-test-client", "version": "0.0.0"},
+            }),
+        );
+        self.send(serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized",
+        }));
+        resp
+    }
+
+    fn call_tool(&mut self, name: &str, arguments: serde_json::Value) -> serde_json::Value {
+        self.request(
+            "tools/call",
+            serde_json::json!({"name": name, "arguments": arguments}),
+        )
+    }
+}
+
+impl Drop for McpClient {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
 fn parse_mermaid_edges(content: &str) -> Vec<(String, String)> {
     content
         .lines()
@@ -894,4 +995,130 @@ fn test_ambiguous_callee_marked_unresolved_or_split() -> Result<(), Box<dyn std:
     }
 
     Ok(())
+}
+
+#[test]
+fn test_serve_starts_and_responds_to_initialize() {
+    let temp_dir = TempDir::new().unwrap();
+    let mut client = McpClient::start(temp_dir.path());
+
+    let resp = client.initialize();
+    let result = &resp["result"];
+
+    assert!(result["protocolVersion"].is_string());
+    assert_eq!(result["serverInfo"]["name"], "amdb");
+    assert!(result["capabilities"]["tools"].is_object());
+}
+
+#[test]
+fn test_get_symbol_disambiguates_duplicate_names() {
+    let temp_dir = TempDir::new().unwrap();
+    let root = temp_dir.path();
+
+    fs::write(root.join("alpha_module.rs"), "fn shared_dup_fn() {}").unwrap();
+    fs::write(root.join("beta_module.rs"), "\n\nfn shared_dup_fn() {}").unwrap();
+
+    cargo_bin_cmd!("amdb")
+        .current_dir(root)
+        .arg("init")
+        .arg(".")
+        .assert()
+        .success();
+
+    let mut client = McpClient::start(root);
+    client.initialize();
+
+    let resp = client.call_tool(
+        "amdb_get_symbol",
+        serde_json::json!({"name": "shared_dup_fn"}),
+    );
+    let result = &resp["result"];
+    assert_ne!(result["isError"], true);
+
+    let text = result["content"][0]["text"].as_str().expect("text content");
+    let matches: serde_json::Value = serde_json::from_str(text).expect("json payload");
+    let arr = matches.as_array().expect("array of matches");
+
+    assert_eq!(arr.len(), 2);
+
+    let mut by_file: std::collections::HashMap<&str, i64> = std::collections::HashMap::new();
+    for m in arr {
+        by_file.insert(
+            m["file"].as_str().expect("file"),
+            m["line"].as_i64().expect("line"),
+        );
+    }
+
+    assert_eq!(by_file.len(), 2);
+    assert_eq!(by_file["alpha_module.rs"], 1);
+    assert_eq!(by_file["beta_module.rs"], 3);
+}
+
+#[test]
+fn test_get_symbol_returns_callee_file() {
+    let temp_dir = TempDir::new().unwrap();
+    let root = temp_dir.path();
+
+    fs::write(root.join("definer_module.rs"), "fn unique_target_fn() {}").unwrap();
+    fs::write(
+        root.join("caller_module.rs"),
+        "fn unique_caller_fn() { unique_target_fn(); }",
+    )
+    .unwrap();
+
+    cargo_bin_cmd!("amdb")
+        .current_dir(root)
+        .arg("init")
+        .arg(".")
+        .assert()
+        .success();
+
+    let mut client = McpClient::start(root);
+    client.initialize();
+
+    let resp = client.call_tool(
+        "amdb_get_symbol",
+        serde_json::json!({"name": "unique_caller_fn"}),
+    );
+    let result = &resp["result"];
+    assert_ne!(result["isError"], true);
+
+    let text = result["content"][0]["text"].as_str().expect("text content");
+    let matches: serde_json::Value = serde_json::from_str(text).expect("json payload");
+    let arr = matches.as_array().expect("array of matches");
+
+    assert_eq!(arr.len(), 1);
+    assert_eq!(arr[0]["file"], "caller_module.rs");
+
+    let callees = arr[0]["callees"].as_array().expect("callees array");
+    assert_eq!(callees.len(), 1);
+    assert_eq!(callees[0]["name"], "unique_target_fn");
+    assert_eq!(callees[0]["file"], "definer_module.rs");
+}
+
+#[test]
+fn test_tools_error_without_index() {
+    let temp_dir = TempDir::new().unwrap();
+    let mut client = McpClient::start(temp_dir.path());
+    client.initialize();
+
+    let calls = [
+        ("amdb_get_context", serde_json::json!({})),
+        ("amdb_focus", serde_json::json!({"query": "anything"})),
+        ("amdb_get_symbol", serde_json::json!({"name": "anything"})),
+    ];
+
+    for (tool, args) in calls {
+        let resp = client.call_tool(tool, args);
+        let result = &resp["result"];
+        assert_eq!(result["isError"], true, "tool {} should error", tool);
+
+        let text = result["content"][0]["text"].as_str().expect("text content");
+        assert!(
+            text.contains("amdb init"),
+            "tool {} error should mention amdb init, got: {}",
+            tool,
+            text
+        );
+    }
 }

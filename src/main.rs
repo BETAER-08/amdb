@@ -6,6 +6,7 @@ use tracing_subscriber::FmtSubscriber;
 mod core;
 mod daemon;
 mod db;
+mod mcp;
 
 use crate::core::generator::ContextGenerator;
 use crate::core::indexer::Indexer;
@@ -39,6 +40,7 @@ enum Commands {
         #[arg(short, long, default_value_t = 1)]
         depth: u8,
     },
+    Serve,
 }
 
 #[tokio::main]
@@ -51,13 +53,24 @@ async fn main() -> anyhow::Result<()> {
         Level::INFO
     };
 
-    let subscriber = FmtSubscriber::builder()
-        .with_max_level(log_level)
-        .with_target(false)
-        .without_time()
-        .finish();
-
-    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+    if matches!(cli.command, Commands::Serve) {
+        let subscriber = FmtSubscriber::builder()
+            .with_max_level(log_level)
+            .with_target(false)
+            .without_time()
+            .with_writer(std::io::stderr)
+            .finish();
+        tracing::subscriber::set_global_default(subscriber)
+            .expect("setting default subscriber failed");
+    } else {
+        let subscriber = FmtSubscriber::builder()
+            .with_max_level(log_level)
+            .with_target(false)
+            .without_time()
+            .finish();
+        tracing::subscriber::set_global_default(subscriber)
+            .expect("setting default subscriber failed");
+    }
 
     let result = match cli.command {
         Commands::Init { path } => {
@@ -73,6 +86,10 @@ async fn main() -> anyhow::Result<()> {
         Commands::Generate { focus, depth } => ContextGenerator::generate(focus, depth)
             .await
             .context("Generation error"),
+        Commands::Serve => {
+            info!("Starting amdb MCP server on stdio");
+            mcp::serve_stdio().await.context("Serve error")
+        }
     };
 
     if let Err(e) = result {
