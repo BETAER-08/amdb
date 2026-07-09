@@ -230,7 +230,7 @@ impl AmdbServer {
 
 #[tool_handler(
     name = "amdb",
-    version = "0.7.0",
+    version = "0.8.0",
     instructions = "amdb serves a pre-built local index of this codebase (SQLite + embeddings, built by `amdb init`). Use amdb_get_context for a project overview, amdb_focus for context about one feature or file, and amdb_get_symbol to find definitions and call relationships. All data is local; nothing leaves the machine. If tools report a missing or stale index, ask the user to run `amdb init`."
 )]
 impl ServerHandler for AmdbServer {}
