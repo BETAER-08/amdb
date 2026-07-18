@@ -40,6 +40,14 @@ pub fn init(conn: &Connection) -> Result<bool> {
     )?;
 
     conn.execute(
+        "CREATE TABLE IF NOT EXISTS file_hashes (
+            file_path TEXT PRIMARY KEY,
+            hash TEXT NOT NULL
+        )",
+        [],
+    )?;
+
+    conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_symbols_file_path ON symbols (file_path)",
         [],
     )?;
@@ -56,6 +64,11 @@ pub fn init(conn: &Connection) -> Result<bool> {
 
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_relationships_file_path ON relationships (file_path)",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_relationships_callee ON relationships (callee)",
         [],
     )?;
 

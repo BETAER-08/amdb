@@ -998,6 +998,189 @@ fn test_ambiguous_callee_marked_unresolved_or_split() -> Result<(), Box<dyn std:
 }
 
 #[test]
+fn test_reinit_skips_unchanged_files() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = TempDir::new()?;
+    let root = temp_dir.path();
+
+    fs::write(root.join("a.rs"), "fn alpha_stable_fn() {}")?;
+    fs::write(root.join("b.rs"), "fn beta_stable_fn() {}")?;
+
+    cargo_bin_cmd!("amdb")
+        .current_dir(root)
+        .arg("init")
+        .arg(".")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "0 unchanged, 0 changed, 2 added, 0 removed",
+        ));
+
+    cargo_bin_cmd!("amdb")
+        .current_dir(root)
+        .arg("init")
+        .arg(".")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "2 unchanged, 0 changed, 0 added, 0 removed",
+        ))
+        .stdout(predicate::str::contains("Embedding calls: 0"));
+
+    Ok(())
+}
+
+#[test]
+fn test_changed_file_is_reindexed() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = TempDir::new()?;
+    let root = temp_dir.path();
+
+    fs::write(root.join("a.rs"), "fn alpha_stable_fn() {}")?;
+    fs::write(root.join("b.rs"), "fn beta_original_fn() {}")?;
+
+    cargo_bin_cmd!("amdb")
+        .current_dir(root)
+        .arg("init")
+        .arg(".")
+        .assert()
+        .success();
+
+    let (a_symbol_id_before, a_vector_rowid_before) = {
+        let conn = open_context_db(root);
+        let symbol_id: i64 = conn.query_row(
+            "SELECT id FROM symbols WHERE file_path = 'a.rs'",
+            [],
+            |row| row.get(0),
+        )?;
+        let vec_conn = Connection::open(root.join(".database/vector/vectors.db"))?;
+        let vector_rowid: i64 = vec_conn.query_row(
+            "SELECT rowid FROM vectors WHERE file_path = 'a.rs'",
+            [],
+            |row| row.get(0),
+        )?;
+        (symbol_id, vector_rowid)
+    };
+
+    fs::write(root.join("b.rs"), "fn beta_modified_fn() {}")?;
+
+    cargo_bin_cmd!("amdb")
+        .current_dir(root)
+        .arg("init")
+        .arg(".")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "1 unchanged, 1 changed, 0 added, 0 removed",
+        ));
+
+    let conn = open_context_db(root);
+    let b_names: Vec<String> = {
+        let mut stmt = conn.prepare("SELECT name FROM symbols WHERE file_path = 'b.rs'")?;
+        let rows = stmt.query_map([], |row| row.get(0))?;
+        rows.collect::<Result<_, _>>()?
+    };
+    assert_eq!(b_names, vec!["beta_modified_fn".to_string()]);
+
+    let a_symbol_id_after: i64 = conn.query_row(
+        "SELECT id FROM symbols WHERE file_path = 'a.rs'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(a_symbol_id_before, a_symbol_id_after);
+
+    let vec_conn = Connection::open(root.join(".database/vector/vectors.db"))?;
+    let a_vector_rowid_after: i64 = vec_conn.query_row(
+        "SELECT rowid FROM vectors WHERE file_path = 'a.rs'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(a_vector_rowid_before, a_vector_rowid_after);
+
+    let modified_vectors: i64 = vec_conn.query_row(
+        "SELECT COUNT(*) FROM vectors WHERE id = 'b.rs::beta_modified_fn'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(modified_vectors, 1);
+
+    let stale_vectors: i64 = vec_conn.query_row(
+        "SELECT COUNT(*) FROM vectors WHERE id = 'b.rs::beta_original_fn'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(stale_vectors, 0);
+
+    Ok(())
+}
+
+#[test]
+fn test_deleted_file_is_purged() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = TempDir::new()?;
+    let root = temp_dir.path();
+
+    fs::write(root.join("a.rs"), "fn alpha_stable_fn() {}")?;
+    fs::write(
+        root.join("b.rs"),
+        "fn beta_gone_fn() { alpha_stable_fn(); }",
+    )?;
+
+    cargo_bin_cmd!("amdb")
+        .current_dir(root)
+        .arg("init")
+        .arg(".")
+        .assert()
+        .success();
+
+    {
+        let conn = open_context_db(root);
+        let edges: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM relationships WHERE file_path = 'b.rs'",
+            [],
+            |row| row.get(0),
+        )?;
+        assert_eq!(edges, 1);
+    }
+
+    fs::remove_file(root.join("b.rs"))?;
+
+    cargo_bin_cmd!("amdb")
+        .current_dir(root)
+        .arg("init")
+        .arg(".")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "1 unchanged, 0 changed, 0 added, 1 removed",
+        ));
+
+    let conn = open_context_db(root);
+    for table in ["symbols", "relationships", "warnings", "file_hashes"] {
+        let count: i64 = conn.query_row(
+            &format!("SELECT COUNT(*) FROM {} WHERE file_path = 'b.rs'", table),
+            [],
+            |row| row.get(0),
+        )?;
+        assert_eq!(count, 0, "table {} still has rows for b.rs", table);
+    }
+
+    let a_symbols: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM symbols WHERE file_path = 'a.rs'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(a_symbols, 1);
+
+    let vec_conn = Connection::open(root.join(".database/vector/vectors.db"))?;
+    let b_vectors: i64 = vec_conn.query_row(
+        "SELECT COUNT(*) FROM vectors WHERE file_path = 'b.rs'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(b_vectors, 0);
+
+    Ok(())
+}
+
+#[test]
 fn test_serve_starts_and_responds_to_initialize() {
     let temp_dir = TempDir::new().unwrap();
     let mut client = McpClient::start(temp_dir.path());

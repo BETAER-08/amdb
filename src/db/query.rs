@@ -2,6 +2,7 @@ use crate::core::parser::{CodeSymbol, CodeWarning};
 use crate::core::symbol::SymbolRef;
 use crate::db::schema;
 use rusqlite::{params, Connection, Result};
+use std::collections::HashMap;
 use std::path::Path;
 
 pub struct Relationship {
@@ -113,7 +114,43 @@ impl ContextDb {
             "DELETE FROM warnings WHERE file_path = ?1",
             params![file_path],
         )?;
+        tx.execute(
+            "DELETE FROM file_hashes WHERE file_path = ?1",
+            params![file_path],
+        )?;
         tx.commit()
+    }
+
+    pub fn get_file_hashes(&self) -> Result<HashMap<String, String>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT file_path, hash FROM file_hashes")?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+
+        let mut hashes = HashMap::new();
+        for row in rows {
+            let (path, hash) = row?;
+            hashes.insert(path, hash);
+        }
+        Ok(hashes)
+    }
+
+    pub fn get_file_hash(&self, file_path: &str) -> Result<Option<String>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT hash FROM file_hashes WHERE file_path = ?1")?;
+        let mut rows = stmt.query_map(params![file_path], |row| row.get::<_, String>(0))?;
+        rows.next().transpose()
+    }
+
+    pub fn upsert_file_hash(&mut self, file_path: &str, hash: &str) -> Result<()> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO file_hashes (file_path, hash) VALUES (?1, ?2)",
+            params![file_path, hash],
+        )?;
+        Ok(())
     }
 
     pub fn get_symbols(&self, file_path: &str) -> Result<Vec<CodeSymbol>> {
@@ -138,7 +175,6 @@ impl ContextDb {
         Ok(symbols)
     }
 
-    #[allow(dead_code)]
     pub fn get_relationships(&self, file_path: &str) -> Result<Vec<Relationship>> {
         let mut stmt = self.conn.prepare(
             "SELECT file_path, caller, callee, callee_file FROM relationships WHERE file_path = ?1",
@@ -160,10 +196,43 @@ impl ContextDb {
         Ok(edges)
     }
 
-    pub fn update_relationship_callee_files(
+    pub fn get_relationships_by_callee(&self, callee: &str) -> Result<Vec<Relationship>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT file_path, caller, callee, callee_file FROM relationships WHERE callee = ?1",
+        )?;
+        let rows = stmt.query_map(params![callee], |row| {
+            let file: String = row.get(0)?;
+            let caller: String = row.get(1)?;
+            Ok(Relationship {
+                caller: SymbolRef::new(file, caller),
+                callee: row.get(2)?,
+                callee_file: row.get(3)?,
+            })
+        })?;
+
+        let mut edges = Vec::new();
+        for edge in rows {
+            edges.push(edge?);
+        }
+        Ok(edges)
+    }
+
+    pub fn get_defining_files(&self, name: &str) -> Result<Vec<String>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT DISTINCT file_path FROM symbols WHERE name = ?1")?;
+        let rows = stmt.query_map(params![name], |row| row.get(0))?;
+
+        let mut files = Vec::new();
+        for file in rows {
+            files.push(file?);
+        }
+        Ok(files)
+    }
+
+    pub fn set_callee_files(
         &mut self,
-        file_path: &str,
-        resolved: &[(String, String, Option<String>)],
+        resolved: &[(String, String, String, Option<String>)],
     ) -> Result<()> {
         let tx = self.conn.transaction()?;
         {
@@ -171,7 +240,7 @@ impl ContextDb {
                 "UPDATE relationships SET callee_file = ?1 WHERE file_path = ?2 AND caller = ?3 AND callee = ?4",
             )?;
 
-            for (caller, callee, callee_file) in resolved {
+            for (file_path, caller, callee, callee_file) in resolved {
                 stmt.execute(params![callee_file, file_path, caller, callee])?;
             }
         }

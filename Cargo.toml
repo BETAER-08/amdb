@@ -46,6 +46,7 @@ fastembed = "4"
 ordered-float = "4.0"
 toml = "0.8"
 bincode = "1.3"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
 crossbeam-channel = "0.5"
 rmcp = { version = "2.2.0", default-features = false, features = ["server", "macros", "transport-io", "schemars"] }
 schemars = "1.2.1"
