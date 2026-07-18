@@ -1,76 +1,88 @@
-# amdb Benchmark Report — v0.8.0
+# amdb Benchmark Report — v0.9.0 (corrected harness)
 
-**Target**: `/home/betaer/RustroverProjects/amdb`
-**Method**: Official AMDB Benchmark Suite (`benchmark.py`)
-**Codebase Baseline**: 31 files scanned, 19,129 total raw tokens
+**Target**: amdb's own source tree
+**Method**: `benchmark.py` (corrected harness, see "Harness corrections" below)
+**Codebase Baseline**: 31 `.rs` files scanned, 21,781 total raw tokens (cl100k_base)
+**Indexed**: 28 files — 3 module-declaration files (`src/core/mod.rs`, `src/daemon/mod.rs`, `src/db/mod.rs`) contain no extractable symbols, are not in the index, and are excluded from denominators rather than silently counted.
 
 ---
 
-## Summary
+## Harness corrections in this release
 
-amdb converts a full codebase into a compressed, structural, AI-readable context. This report measures how effectively it reduces token volume while preserving retrieval accuracy and dependency structure. All figures are produced by the automated benchmark suite against amdb's own source tree.
+The v0.8.0 numbers were produced by a harness with three measurement biases. All three are fixed; the corrected numbers below replace the old ones and several moved down.
 
-| Metric | Score | Meaning |
-|--------|-------|---------|
-| Precision Targeting | 96.8% | Retrieves the exact file requested |
-| Global Efficiency | 97.8% reduction | Token savings vs. full-repo context dump |
-| Noise Reduction | 95.1% compression | Interface kept, implementation stripped (complex files) |
-| Context Awareness | 100.0% graph inclusion | Dependency graph generated for every run |
+1. **Interface-extraction regex matched the wrong sections.** The old pattern (`### .*<basename>` with `re.DOTALL`) could span from the first `### ` heading in the document to a later mention of the basename, capturing a fragment of a different file's section. It also could not distinguish the four `mod.rs` files from each other. The corrected harness anchors on the file's full relative path (`^### src/core/indexer.rs$`). **Effect: noise-reduction compression fell from a reported 95.1% to a real 81.6%** (e.g. `indexer` was reported as 88 interface tokens; the real section is 658 tokens).
+2. **The graph check only tested for a ` ```mermaid ` fence.** The generator emits that fence unconditionally, even with zero edges, so "100% graph inclusion" was trivially true. The corrected check requires at least one real `-->` edge inside the mermaid block. The score remained 100% (28/28) on this tree — but it is now a meaningful claim.
+3. **Query normalization and loose hit-matching.** Queries were derived by replacing underscores with spaces (`"vector store"`), which defeats exact-stem matching and forces vector search; a "hit" was then counted if the basename appeared *anywhere* in the output — including as a dependency of an unrelated match. The corrected harness queries the literal file stem (`vector_store`) and counts a hit only if the output contains the requested file's own `### <path>` section heading, measured at `--depth 0` so dependency expansion cannot mask a retrieval miss.
+
+Additionally, global efficiency fell from a reported 97.8% to 91.5%, reflecting both the corrected protocol and a codebase that has grown since v0.8.0.
+
+---
+
+## Scorecard
+
+| Metric | Score | Protocol |
+|--------|-------|----------|
+| Precision targeting | 100.0% (28/28) | Query = exact file stem, `--depth 0`; hit = the file's own section heading present |
+| Global efficiency | 91.5% reduction | `--depth 1` focus output tokens vs. 21,781-token full dump, averaged over 28 queries |
+| Noise reduction | 81.6% compression | Interface section tokens vs. raw file tokens, top-5 largest files |
+| Graph presence | 100.0% (28/28) | At least one real `-->` edge inside the mermaid block at `--depth 1` |
 
 ---
 
 ## Heavyweight Match: Implementation (Raw) vs Interface (amdb)
 
-The five largest source files were selected to evaluate noise reduction under maximum implementation density. Raw tokens represent the full file; amdb tokens represent the extracted interface (symbols, signatures, relationships).
+Top-5 largest files, interface section extracted by exact path anchor:
 
-| File | Raw Tokens | amdb Tokens | Compression | Winner |
-|------|-----------:|------------:|:-----------:|:------:|
-| indexer | 2,601 | 88 | 96.6% | amdb |
-| generator | 2,472 | 60 | 97.6% | amdb |
-| query | 2,105 | 119 | 94.3% | amdb |
-| parser | 1,411 | 71 | 95.0% | amdb |
-| vector_store | 1,387 | 108 | 92.2% | amdb |
+| File | Raw Tokens | amdb Tokens | Compression |
+|------|-----------:|------------:|:-----------:|
+| indexer | 4,630 | 658 | 85.8% |
+| query | 2,659 | 713 | 73.2% |
+| generator | 2,472 | 484 | 80.4% |
+| mcp | 2,075 | 372 | 82.1% |
+| parser | 1,411 | 191 | 86.5% |
 
-Across the five heaviest files, amdb reduced 9,976 raw tokens to 446 interface tokens — a 95.5% reduction on the densest portion of the codebase.
-
----
-
-## Scorecard Detail
-
-### 1. Precision Targeting — 96.8%
-Focus queries resolve to the exact file requested with near-perfect accuracy. The slight drop from v0.7.0's 100% reflects a larger codebase (31 files vs. 30, +24% raw tokens) after the v0.8.0 refactors and the new MCP server module widened the retrieval surface.
-
-### 2. Global Efficiency — 97.8% reduction
-Against a full-repo context dump of 19,129 tokens, amdb's targeted output consumes roughly 2.2% of the token budget, freeing the remainder for reasoning rather than raw source.
-
-### 3. Noise Reduction — 95.1% compression
-On complex files, amdb strips implementation bodies and retains only structural context: symbol names, kinds, signatures, and visibility. This is the interface layer an agent needs to reason about call relationships without reading full function bodies.
-
-### 4. Context Awareness — 100.0% graph inclusion
-A Mermaid dependency graph was generated for every run. Graph edges are file-attributed via the post-index `SymbolResolver` (v0.7.0), and as of v0.8.0 the same resolver output backs the `amdb_get_symbol` MCP tool, so callee attribution is consistent between generated reports and live MCP queries.
+Across the five heaviest files: 13,247 raw tokens → 2,418 interface tokens (81.7% reduction).
 
 ---
 
-## Interpretation
+## Comparison: amdb vs raw dump vs grep-based agentic search
 
-The core value proposition is token efficiency without loss of structural fidelity. A 97.8% global reduction means an agent can hold the relevant interface of a 31-file project in a fraction of the context a raw dump would require, while the dependency graph preserves the call structure needed for cross-file reasoning.
+Fixed task set: five questions of the form *"where is symbol X defined, and which functions call it?"* on the same fixture repo. Baseline protocols:
 
-v0.8.0 makes this context directly consumable by agents: `amdb serve` exposes the same index over MCP (stdio), so the compression measured here applies to every `amdb_get_context` and `amdb_focus` tool call an agent makes — the agent receives the 2.2% interface slice, never the full source dump.
+- **Raw full-repo dump**: feed the entire `src/` tree; 1 call.
+- **grep agentic**: one `grep -rn <symbol> src` call, then read every matched file in full — the minimal loop a grep-only agent performs. Tokens = grep output + full text of matched files.
+- **amdb**: one `amdb generate --focus <symbol>` call (default depth 1). Tokens = the focus output.
+
+We did **not** run competitor indexing tools (Sourcegraph Cody, Aider repo-map, etc.), so no numbers for them appear here. These are the only two baselines we actually executed.
+
+| Question (symbol) | amdb tokens | calls | raw dump tokens | calls | grep tokens | calls |
+|---|---:|---:|---:|---:|---:|---:|
+| cosine_similarity | 3,859 | 1 | 21,781 | 1 | 1,434 | 2 |
+| reresolve_delta | 4,434 | 1 | 21,781 | 1 | 4,858 | 2 |
+| normalize_path | 2,604 | 1 | 21,781 | 1 | 5,219 | 3 |
+| focus_filename | 4,530 | 1 | 21,781 | 1 | 4,606 | 3 |
+| content_hash | 4,432 | 1 | 21,781 | 1 | 4,687 | 2 |
+| **average** | **3,972** | **1** | **21,781** | **1** | **4,161** | **2.4** |
+
+Honest reading: on a 31-file repo, grep-then-read is competitive with amdb on tokens (4,161 vs 3,972) and even wins when the symbol lives in one small file (`cosine_similarity`). amdb's advantages at this scale are one structured call instead of 2–3, and answers that carry signatures, visibility, and resolver-attributed caller/callee files instead of raw text the model must re-parse. The raw dump costs ~5.5× more tokens per question and grows linearly with repo size.
 
 ---
 
 ## Reproduction
 
 ```
-python benchmark.py
+pip install tiktoken
+AMDB_BIN=./target/release/amdb python3 benchmark.py
 ```
 
-The suite scans the target codebase, measures a raw-token baseline, runs the heavyweight match against the top-5 largest files, and emits the scorecard. Figures in this report correspond to the v0.8.0 release build.
+The harness always runs `amdb init` first (incremental — unchanged files are skipped), reads the indexed file list from `.database/context.db`, runs each file query at depth 0 and depth 1, then runs the comparison protocols.
 
 ---
 
 ## Notes and Limitations
 
-- Compression ratios are highest on implementation-dense files; small or declaration-only files show lower ratios because their raw form is already close to their interface form.
-- Token counts are tokenizer-dependent; absolute values will shift with a different tokenizer, though relative reduction remains representative.
-- The benchmark measures amdb against its own source tree. Cross-language and larger-repo figures may differ and are tracked separately.
+- All figures measured on amdb's own source tree; a self-benchmark is a convenience fixture, not a claim about your repo. Larger and cross-language repos will differ.
+- Token counts use `cl100k_base`; absolute values shift with tokenizer choice, relative reductions less so.
+- Compression is highest on implementation-dense files; declaration-heavy files compress less because their raw form already resembles their interface.
+- Precision is measured with exact-stem queries — it is a retrieval-plumbing test, not a semantic-search quality test. Vector-search quality for fuzzy queries is not covered by this harness.

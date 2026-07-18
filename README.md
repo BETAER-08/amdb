@@ -1,145 +1,34 @@
-# amdb: AI Context Generator
+# amdb
 
-![Rust](https://img.shields.io/badge/built_with-Rust-dca282.svg)
-![Version](https://img.shields.io/badge/version-0.8.0-blue.svg)
 <p align="left">
   <img src="amdb.png" alt="amdb logo" width="60">
 </p>
 
----
-## 📄 Related documents
+![Rust](https://img.shields.io/badge/built_with-Rust-dca282.svg)
+![Version](https://img.shields.io/badge/version-0.9.0-blue.svg)
 
-### [benchmark](benchmark.md)
-### [crates.io](https://crates.io/crates/amdb)
----
+**amdb turns your codebase into AI context — entirely on your machine.**
 
-## ⚡ The Context Problem
-AI coding assistants (Cursor, Windsurf, Claude) are powerful, **but they are blind**. They only see the files you open. They lack the deep, structural understanding of your entire codebase that you have.
+amdb is a zero-runtime, single-binary code context MCP server with combined graph + vector retrieval. No code leaves the machine and no Node/Python runtime is required. Built for air-gapped environments, CI containers, and regulated industries where cloud-based codebase indexing is prohibited.
 
-**`amdb` (Agent Memory Database) solves this.** It scans your local project, builds a vector index of your code, and generates a **single, highly-optimized Markdown context file**. Feed this file to your AI, and watch it understand your project like never before.
-
----
-
-## 📦 Installation
-
-### Option 1: Manual Download
-Prefer to download the file yourself? Go to the Releases Page and download the version for your OS.
-
-### Option 2: Install via Cargo
-If you have the Rust toolchain installed:
+## Install
 
 ```bash
 cargo install amdb
 ```
-### Option 3: Run via Docker (No Rust required)
 
-You can run `amdb` instantly without setting up a Rust environment by using the official Docker image. This is highly recommended for CI/CD pipelines or non-Rust setups.
+Or download a static binary for Linux/macOS from the [Releases page](https://github.com/BETAER-08/amdb/releases) — no toolchain required.
 
-```bash
-# Pull the latest image from GitHub Container Registry
-docker pull ghcr.io/OWNER/amdb:latest
-
-# Initialize the database (mounting the current directory to /app)
-docker run --rm -v $(pwd):/app ghcr.io/OWNER/amdb:latest init .
-
-# Generate context
-docker run --rm -v $(pwd):/app ghcr.io/OWNER/amdb:latest generate --focus main
-```
-
-## 🚀 Quick Start
-
-### 1. Initialize Project
-Run this in your project root. `amdb` will scan your code (Rust, Python, JS/TS), extract symbols, and build a vector database in a hidden `.database/` folder.
+## Quickstart
 
 ```bash
-amdb init
+amdb init .    # index the repo: AST parse + local embeddings, incremental
+amdb serve     # expose the index as an MCP server over stdio
 ```
 
-You can also specify a target directory:
+Done. Prefer a file instead of a server? `amdb generate --focus "auth"` writes a targeted context file to `.amdb/`.
 
-```bash
-amdb init ./my-project
-```
-
-### 2. Generate Context
-Create a full project summary. This generates `.amdb/context.md`, which contains a compressed map of your entire codebase.
-
-```bash
-amdb generate
-```
-
-**🔥 Pro Tip:** Drag and drop `.amdb/context.md` into your AI chat (Cursor/Claude) to give it "God Mode" understanding of your project.
-
----
-
-## 🧠 Advanced Usage: Focus Mode
-
-For large projects, a full context might be too big. Use **Focus Mode** to generate a summary relevant to a specific feature or bug. `amdb` uses **hybrid search** (exact match first, then vector search) to find the most relevant files.
-
-```bash
-# Example: generating context for authentication logic
-amdb generate --focus "login authentication jwt"
-```
-
-This creates a targeted summary (e.g., in `.amdb/`) containing only the symbols and files relevant to "login authentication jwt".
-
-### 🎯 Depth Control: Expand Context with Call Graph
-
-When using focus mode, you can control how deeply `amdb` explores related files using the **call graph**. The `--depth` flag determines how many levels of function calls to traverse from your initial matches.
-
-```bash
-# Depth 0: Only files that exactly match the query
-amdb generate --focus "authenticate" --depth 0
-
-# Depth 1 (default): Include files directly called by matched files
-amdb generate --focus "authenticate" --depth 1
-
-# Depth 2: Include files 2 levels deep in the call chain
-amdb generate --focus "authenticate" --depth 2
-```
-
-**How it works:**
-1. **Exact Match Priority**: First looks for files/symbols that exactly match your query
-2. **Vector Search Fallback**: If no exact matches found, uses semantic similarity search
-3. **Call Graph Traversal**: Expands context by following function calls to depth N
-4. **Smart Filtering**: Only includes files within similarity threshold (0.25) to keep context relevant
-
-**Example Use Cases:**
-- `--depth 0`: When you need only the core implementation (e.g., a single module)
-- `--depth 1`: When you need immediate dependencies (default, works for most cases)
-- `--depth 2+`: When debugging complex issues that span multiple layers
-
----
-
-## 🔄 Daemon Mode: Auto-Sync Your Context
-
-Want your AI context to stay fresh automatically? Use **Daemon Mode** to watch your project for changes. When you edit, rename, or delete files, `amdb` instantly updates the database in the background.
-
-```bash
-amdb daemon
-```
-
-Or specify a directory:
-
-```bash
-amdb daemon ./my-project
-```
-
-The daemon will:
-- ✅ Automatically detect file changes (create, modify, delete, rename)
-- ✅ Update the vector database in real-time
-- ✅ Keep your context synchronized with your codebase
-- ✅ Run silently in the background
-
-**Pro Tip:** Run the daemon in a separate terminal window while you code. Your AI context stays up-to-date without manual `amdb init` runs.
-
----
-
-## 🔌 MCP Server: Plug amdb into Your AI Tools
-
-`amdb serve` exposes the local index as a [Model Context Protocol](https://modelcontextprotocol.io) server over **stdio** — no HTTP, no remote hosting, your code never leaves the machine. Any MCP-capable client (VSCode, Cursor, Claude Code, Zed) can query the index directly.
-
-Run `amdb init` first, then register the server with your client.
+## Connect your editor
 
 **VSCode / Cursor** — add `.vscode/mcp.json` to your project:
 
@@ -170,86 +59,98 @@ The server exposes three tools, all reading from the pre-built local index:
 
 If no index exists the tools respond with an error asking you to run `amdb init` — the server never indexes on its own.
 
----
+## Demo
 
-## 🛠 Supported Languages
+Real session, 1.35 seconds end-to-end ([scripts/demo.sh](scripts/demo.sh)):
 
-`amdb` uses robust Tree-sitter parsers to fully understand the syntax and structure of:
+```console
+$ amdb init .
+ INFO Files: 33 unchanged, 1 changed, 0 added, 0 removed
+ INFO Embedding calls: 0
+ INFO Project indexed successfully at .
 
-- **Rust** (`.rs`)
-- **Python** (`.py`)
-- **JavaScript** (`.js`, `.jsx`, `.mjs`)
-- **TypeScript** (`.ts`, `.tsx`)
-- **C** (`.c`, `.h`)
-- **C++** (`.cpp`, `.hpp`, `.cc`, `.cxx`)
-- **C#**(`.cs`)
-- **Go** (`.go`)
-- **Java** (`.java`)
-- **Ruby** (`.rb`)
-- **PHP** (.`php`)
-- **HTML** (`.html`, `.htm`)
-- **CSS** (`.css`)
-- **JSON** (`.json`)
-- **Bash** (`.sh`, `.bash`)
+$ amdb serve
+  MCP client calls amdb_get_symbol with {"name": "cosine_similarity"}
 
-`is_public` and `signature` are derived from the actual AST for **Rust**, **Python**, and **TypeScript**
-(`.ts`/`.tsx`, sharing the TypeScript enricher). Every other supported language falls back to
-`is_public = true` and `signature = None` — symbols are still extracted, but these two fields are
-not yet enriched for them.
+cosine_similarity — src/core/vector_store.rs:196
+  signature:  fn cosine_similarity(a: &[f32], b: &[f32]) -> f64
+  visibility: private
+  called by:  search (src/core/vector_store.rs)
+  calls:      iter, map, sqrt, sum, zip
 
----
+Answer came from the local index. No network. No code left the machine.
+```
 
-## ⚙️ Configuration
+To record the cast on a host with asciinema: `asciinema rec -c "AMDB_BIN=./target/release/amdb ./scripts/demo.sh" demo.cast`, then `agg demo.cast demo.gif`.
 
-### Custom Configuration (Optional)
+## Benchmarks
 
-You can customize `amdb` behavior by creating an `amdb.toml` file in your project root:
+Measured by [`benchmark.py`](benchmark.py) against amdb's own source tree (31 files, 21,781 raw tokens). Full methodology and caveats in [benchmark.md](benchmark.md).
+
+| Metric | Score | Meaning |
+|--------|-------|---------|
+| Precision targeting | 100% (28/28 indexed files) | Focus query returns the exact file's own section |
+| Global efficiency | 91.5% reduction | Focus output tokens vs. a full-repo dump |
+| Noise reduction | 81.6% compression | Interface tokens vs. raw tokens, top-5 largest files |
+| Graph presence | 100% (28/28) | Output contains real `-->` dependency edges |
+
+3 of 31 files are module-declaration files with no extractable symbols; they are not in the index and are excluded from the denominator, not silently counted.
+
+## Language support
+
+Symbols and the call graph are extracted for all 16 grammars, but `is_public` and `signature` enrichment is AST-accurate for only three languages. The rest fall back to `is_public = true` and no signature — honest table below, so you know what you get:
+
+| Language | Extensions | Symbols + call graph | `is_public` / `signature` |
+|----------|-----------|:---:|:---|
+| Rust | `.rs` | ✅ | ✅ AST-accurate |
+| Python | `.py` | ✅ | ✅ AST-accurate |
+| TypeScript | `.ts`, `.tsx` | ✅ | ✅ AST-accurate |
+| JavaScript | `.js`, `.jsx`, `.mjs` | ✅ | fallback (`true` / none) |
+| C | `.c`, `.h` | ✅ | fallback (`true` / none) |
+| C++ | `.cpp`, `.hpp`, `.cc`, `.cxx` | ✅ | fallback (`true` / none) |
+| C# | `.cs` | ✅ | fallback (`true` / none) |
+| Go | `.go` | ✅ | fallback (`true` / none) |
+| Java | `.java` | ✅ | fallback (`true` / none) |
+| Ruby | `.rb` | ✅ | fallback (`true` / none) |
+| PHP | `.php` | ✅ | fallback (`true` / none) |
+| HTML | `.html`, `.htm` | ✅ | fallback (`true` / none) |
+| CSS | `.css` | ✅ | fallback (`true` / none) |
+| JSON | `.json` | ✅ | fallback (`true` / none) |
+| Bash | `.sh`, `.bash` | ✅ | fallback (`true` / none) |
+
+## How it works
+
+`amdb init` parses every source file with Tree-sitter, extracts symbols and call edges, and embeds each symbol with a local fastembed model — content-hashed, so unchanged files are skipped entirely on re-runs. Everything lands in two SQLite files: a symbol/relationship store and a vector store. Retrieval combines exact name matching, cosine similarity over the vectors, and call-graph expansion, served over MCP stdio or written to a Markdown context file.
+
+## Comparison
+
+Same fixture repo (amdb's own source), same five questions ("where is symbol X defined, and who calls it?"), all numbers actually measured by `benchmark.py`. We did not run competitor indexing tools, so none appear here; the baselines are a raw full-repo dump and a scripted grep-then-read-matched-files agent protocol.
+
+| Strategy | Avg tokens to model | Avg tool calls |
+|----------|--------------------:|---------------:|
+| Raw full-repo dump | 21,781 | 1 |
+| grep + read matched files | 4,161 | 2.4 |
+| amdb (`--focus`, depth 1) | 3,972 | 1 |
+
+On a 31-file repo, grep is genuinely competitive on tokens — amdb's edge at this scale is one structured call instead of 2–4, with signatures, visibility, and resolver-accurate caller/callee attribution instead of raw text. The token gap widens with repo size: the dump grows linearly, grep grows with match noise, amdb's focus output grows with the size of the relevant interface.
+
+## More
+
+**Daemon mode** — `amdb daemon` watches the project and incrementally re-indexes on save, keeping the MCP answers fresh.
+
+**Focus depth** — `amdb generate --focus <query> --depth N` expands context N call-graph hops from the matched files (default 1).
+
+**Configuration** — optional `amdb.toml` in the project root:
 
 ```toml
-server_port = 3000
-
-exclude_patterns = [
-    "target",
-    ".git",
-    "node_modules",
-    ".amdb",
-    ".fastembed_cache",
-    "__pycache__",
-    "dist",
-    "build"
-]
+db_path = ".database"
+ignore_patterns = ["target", ".git", "node_modules", ".amdb", ".fastembed_cache", "__pycache__", ".database"]
 ```
 
-**Configuration Options:**
-- `server_port`: Port for future server features (default: 3000)
-- `exclude_patterns`: Directories and patterns to ignore during scanning
+`AMDB_DB_PATH` overrides `db_path`. Add `.database/` and `.amdb/` to your `.gitignore`.
 
-### Verbose Mode
+**Verbose** — `-v` / `--verbose` on any command for debug logs.
 
-Need detailed logs for debugging? Add the `--verbose` (or `-v`) flag to any command:
+## License
 
-```bash
-amdb init --verbose
-amdb generate --verbose
-amdb daemon --verbose
-```
-
-This outputs detailed debug information about file scanning, parsing, and embedding generation.
-
----
-
-## 📝 Git Configuration
-`amdb` generates local files that should usually be ignored by Git.
-Add this to your `.gitignore`:
-
-```text
-.database/
-.amdb/
-```
-
-<p align="center">
-  Generated by amdb • The Missing Memory for AI Agents
-</p>
-
-Please email us for bug reports or inquiries.
-email:try.betaer@gmail.com
+MIT. Bug reports and inquiries: try.betaer@gmail.com
