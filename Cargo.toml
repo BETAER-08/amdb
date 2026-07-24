@@ -2,7 +2,7 @@
 name = "amdb"
 version = "1.0.0"
 edition = "2024"
-description = "Turn your codebase into AI context. A high-performance context generator for LLMs (Cursor, Claude) using Tree-sitter and Vector Search."
+description = "Local code context server for AI assistants. Tree-sitter parsing, call graphs, and local embeddings over MCP stdio."
 license = "MIT"
 repository = "https://github.com/BETAER-08/amdb"
 keywords = ["llm", "context-generator", "ai-agent", "developer-tools", "code-analysis"]
