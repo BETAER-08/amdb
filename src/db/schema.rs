@@ -103,6 +103,7 @@ pub fn init(conn: &Connection) -> Result<bool> {
     let migrated = if version < CURRENT_SCHEMA_VERSION {
         conn.execute("DELETE FROM relationships", [])?;
         conn.execute("DELETE FROM symbols", [])?;
+        conn.execute("DELETE FROM file_hashes", [])?;
         conn.execute_batch(&format!("PRAGMA user_version = {}", CURRENT_SCHEMA_VERSION))?;
         true
     } else {

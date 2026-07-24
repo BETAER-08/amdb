@@ -1,17 +1,17 @@
-# amdb Benchmark Report — v0.9.0 (corrected harness)
+# amdb Benchmark Report — v1.0.0 (corrected harness)
 
 **Target**: amdb's own source tree
 **Method**: `benchmark.py` (corrected harness, see "Harness corrections" below)
-**Codebase Baseline**: 31 `.rs` files scanned, 21,781 total raw tokens (cl100k_base)
+**Codebase Baseline**: 31 `.rs` files scanned, 21,887 total raw tokens (cl100k_base)
 **Indexed**: 28 files — 3 module-declaration files (`src/core/mod.rs`, `src/daemon/mod.rs`, `src/db/mod.rs`) contain no extractable symbols, are not in the index, and are excluded from denominators rather than silently counted.
 
 ---
 
-## Harness corrections in this release
+## Harness corrections
 
-The v0.8.0 numbers were produced by a harness with three measurement biases. All three are fixed; the corrected numbers below replace the old ones and several moved down.
+The v0.8.0 numbers were produced by a harness with three measurement biases. All three were fixed in v0.9.0; the corrected protocol is what produced every number below, and several figures moved down when it landed.
 
-1. **Interface-extraction regex matched the wrong sections.** The old pattern (`### .*<basename>` with `re.DOTALL`) could span from the first `### ` heading in the document to a later mention of the basename, capturing a fragment of a different file's section. It also could not distinguish the four `mod.rs` files from each other. The corrected harness anchors on the file's full relative path (`^### src/core/indexer.rs$`). **Effect: noise-reduction compression fell from a reported 95.1% to a real 81.6%** (e.g. `indexer` was reported as 88 interface tokens; the real section is 658 tokens).
+1. **Interface-extraction regex matched the wrong sections.** The old pattern (`### .*<basename>` with `re.DOTALL`) could span from the first `### ` heading in the document to a later mention of the basename, capturing a fragment of a different file's section. It also could not distinguish the four `mod.rs` files from each other. The corrected harness anchors on the file's full relative path (`^### src/core/indexer.rs$`). **Effect: noise-reduction compression fell from a reported 95.1% to a real 81.7%** (e.g. `indexer` was reported as 88 interface tokens; the real section is 658 tokens).
 2. **The graph check only tested for a ` ```mermaid ` fence.** The generator emits that fence unconditionally, even with zero edges, so "100% graph inclusion" was trivially true. The corrected check requires at least one real `-->` edge inside the mermaid block. The score remained 100% (28/28) on this tree — but it is now a meaningful claim.
 3. **Query normalization and loose hit-matching.** Queries were derived by replacing underscores with spaces (`"vector store"`), which defeats exact-stem matching and forces vector search; a "hit" was then counted if the basename appeared *anywhere* in the output — including as a dependency of an unrelated match. The corrected harness queries the literal file stem (`vector_store`) and counts a hit only if the output contains the requested file's own `### <path>` section heading, measured at `--depth 0` so dependency expansion cannot mask a retrieval miss.
 
@@ -24,8 +24,8 @@ Additionally, global efficiency fell from a reported 97.8% to 91.5%, reflecting 
 | Metric | Score | Protocol |
 |--------|-------|----------|
 | Precision targeting | 100.0% (28/28) | Query = exact file stem, `--depth 0`; hit = the file's own section heading present |
-| Global efficiency | 91.5% reduction | `--depth 1` focus output tokens vs. 21,781-token full dump, averaged over 28 queries |
-| Noise reduction | 81.6% compression | Interface section tokens vs. raw file tokens, top-5 largest files |
+| Global efficiency | 91.5% reduction | `--depth 1` focus output tokens vs. 21,887-token full dump, averaged over 28 queries |
+| Noise reduction | 81.7% compression | Interface section tokens vs. raw file tokens, top-5 largest files |
 | Graph presence | 100.0% (28/28) | At least one real `-->` edge inside the mermaid block at `--depth 1` |
 
 ---
@@ -39,10 +39,10 @@ Top-5 largest files, interface section extracted by exact path anchor:
 | indexer | 4,630 | 658 | 85.8% |
 | query | 2,659 | 713 | 73.2% |
 | generator | 2,472 | 484 | 80.4% |
-| mcp | 2,075 | 372 | 82.1% |
+| mcp | 2,170 | 372 | 82.9% |
 | parser | 1,411 | 191 | 86.5% |
 
-Across the five heaviest files: 13,247 raw tokens → 2,418 interface tokens (81.7% reduction).
+Across the five heaviest files: 13,342 raw tokens → 2,418 interface tokens (81.9% reduction).
 
 ---
 
@@ -58,14 +58,14 @@ We did **not** run competitor indexing tools (Sourcegraph Cody, Aider repo-map, 
 
 | Question (symbol) | amdb tokens | calls | raw dump tokens | calls | grep tokens | calls |
 |---|---:|---:|---:|---:|---:|---:|
-| cosine_similarity | 3,859 | 1 | 21,781 | 1 | 1,434 | 2 |
-| reresolve_delta | 4,434 | 1 | 21,781 | 1 | 4,858 | 2 |
-| normalize_path | 2,604 | 1 | 21,781 | 1 | 5,219 | 3 |
-| focus_filename | 4,530 | 1 | 21,781 | 1 | 4,606 | 3 |
-| content_hash | 4,432 | 1 | 21,781 | 1 | 4,687 | 2 |
-| **average** | **3,972** | **1** | **21,781** | **1** | **4,161** | **2.4** |
+| cosine_similarity | 3,859 | 1 | 21,887 | 1 | 1,434 | 2 |
+| reresolve_delta | 4,434 | 1 | 21,887 | 1 | 4,858 | 2 |
+| normalize_path | 2,604 | 1 | 21,887 | 1 | 5,219 | 3 |
+| focus_filename | 4,530 | 1 | 21,887 | 1 | 4,701 | 3 |
+| content_hash | 4,432 | 1 | 21,887 | 1 | 4,687 | 2 |
+| **average** | **3,972** | **1** | **21,887** | **1** | **4,180** | **2.4** |
 
-Honest reading: on a 31-file repo, grep-then-read is competitive with amdb on tokens (4,161 vs 3,972) and even wins when the symbol lives in one small file (`cosine_similarity`). amdb's advantages at this scale are one structured call instead of 2–3, and answers that carry signatures, visibility, and resolver-attributed caller/callee files instead of raw text the model must re-parse. The raw dump costs ~5.5× more tokens per question and grows linearly with repo size.
+Honest reading: on a 31-file repo, grep-then-read is competitive with amdb on tokens (4,180 vs 3,972) and even wins when the symbol lives in one small file (`cosine_similarity`). amdb's advantages at this scale are one structured call instead of 2–3, and answers that carry signatures, visibility, and resolver-attributed caller/callee files instead of raw text the model must re-parse. The raw dump costs ~5.5× more tokens per question and grows linearly with repo size.
 
 ---
 

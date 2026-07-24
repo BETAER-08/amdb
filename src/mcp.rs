@@ -170,7 +170,7 @@ impl AmdbServer {
     }
 
     #[tool(
-        description = "Look up a symbol by exact name and return every definition in the index as a JSON array. Each match has: file, name, kind, line, signature, is_public, callers (symbols that call it, with their files), and callees (symbols it calls; each callee's file comes from the resolver and is null when the definition is ambiguous or unknown). When a name is defined in multiple files all matches are returned; pass `file` to restrict to one. Use this to jump to a definition or trace call relationships. Results come from the pre-built local amdb index created by `amdb init`."
+        description = "Look up a symbol by exact name and return every definition in the index as a JSON array. Each match has: file, name, kind, line, signature, is_public, callers (symbols that call it, with their files), and callees (symbols it calls). Each callee entry has name, file, and resolution: 'same-file' when the callee is defined in the caller's own file, 'global-unique' when exactly one file in the project defines it, or 'unresolved' when the definition is ambiguous or unknown (file is null in that case). When a name is defined in multiple files all matches are returned; pass `file` to restrict to one. Use this to jump to a definition or trace call relationships. Results come from the pre-built local amdb index created by `amdb init`."
     )]
     async fn amdb_get_symbol(
         &self,
@@ -206,7 +206,14 @@ impl AmdbServer {
                 .get_callees_of(&file, &sym.name)
                 .map_err(|e| internal(e.into()))?
                 .into_iter()
-                .map(|(name, callee_file)| json!({ "name": name, "file": callee_file }))
+                .map(|(name, callee_file)| {
+                    let resolution = match callee_file.as_deref() {
+                        None => "unresolved",
+                        Some(f) if f == file => "same-file",
+                        Some(_) => "global-unique",
+                    };
+                    json!({ "name": name, "file": callee_file, "resolution": resolution })
+                })
                 .collect();
 
             matches.push(json!({
@@ -230,7 +237,7 @@ impl AmdbServer {
 
 #[tool_handler(
     name = "amdb",
-    version = "0.8.0",
+    version = "1.0.0",
     instructions = "amdb serves a pre-built local index of this codebase (SQLite + embeddings, built by `amdb init`). Use amdb_get_context for a project overview, amdb_focus for context about one feature or file, and amdb_get_symbol to find definitions and call relationships. All data is local; nothing leaves the machine. If tools report a missing or stale index, ask the user to run `amdb init`."
 )]
 impl ServerHandler for AmdbServer {}

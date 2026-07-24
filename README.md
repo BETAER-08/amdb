@@ -5,7 +5,7 @@
 </p>
 
 ![Rust](https://img.shields.io/badge/built_with-Rust-dca282.svg)
-![Version](https://img.shields.io/badge/version-0.9.0-blue.svg)
+![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
 
 **amdb turns your codebase into AI context — entirely on your machine.**
 
@@ -55,17 +55,20 @@ The server exposes three tools, all reading from the pre-built local index:
 | :- | :- |
 | `amdb_get_context` | Full project overview: files, symbols, and the mermaid dependency graph |
 | `amdb_focus` | Context narrowed to a query via name match + semantic vector search, expanded by `depth` dependency hops |
-| `amdb_get_symbol` | Every definition of a symbol name as JSON: file, kind, line, signature, callers, and callees (with resolver-accurate files) |
+| `amdb_get_symbol` | Every definition of a symbol name as JSON: file, kind, line, signature, callers, and callees — each callee carries its resolved file and a `resolution` value (`same-file`, `global-unique`, or `unresolved`) |
 
 If no index exists the tools respond with an error asking you to run `amdb init` — the server never indexes on its own.
 
 ## Demo
 
-Real session, 1.35 seconds end-to-end ([scripts/demo.sh](scripts/demo.sh)):
+Real session, 1.0 seconds end-to-end ([scripts/demo.sh](scripts/demo.sh)):
 
 ```console
 $ amdb init .
- INFO Files: 33 unchanged, 1 changed, 0 added, 0 removed
+ INFO Initializing amdb in: .
+ INFO Scanning files in ....
+ INFO Files: 35 unchanged, 0 changed, 0 added, 0 removed
+ INFO Indexing 0 files using 12 threads...
  INFO Embedding calls: 0
  INFO Project indexed successfully at .
 
@@ -85,13 +88,13 @@ To record the cast on a host with asciinema: `asciinema rec -c "AMDB_BIN=./targe
 
 ## Benchmarks
 
-Measured by [`benchmark.py`](benchmark.py) against amdb's own source tree (31 files, 21,781 raw tokens). Full methodology and caveats in [benchmark.md](benchmark.md).
+Measured by [`benchmark.py`](benchmark.py) against amdb's own source tree (31 files, 21,887 raw tokens). Full methodology and caveats in [benchmark.md](benchmark.md).
 
 | Metric | Score | Meaning |
 |--------|-------|---------|
-| Precision targeting | 100% (28/28 indexed files) | Focus query returns the exact file's own section |
+| Precision targeting | 100% (28/28 indexed files) | Query = exact file stem; the file's own section comes back. A retrieval-plumbing test, not a semantic-search-quality test |
 | Global efficiency | 91.5% reduction | Focus output tokens vs. a full-repo dump |
-| Noise reduction | 81.6% compression | Interface tokens vs. raw tokens, top-5 largest files |
+| Noise reduction | 81.7% compression | Interface tokens vs. raw tokens, top-5 largest files |
 | Graph presence | 100% (28/28) | Output contains real `-->` dependency edges |
 
 3 of 31 files are module-declaration files with no extractable symbols; they are not in the index and are excluded from the denominator, not silently counted.
@@ -128,8 +131,8 @@ Same fixture repo (amdb's own source), same five questions ("where is symbol X d
 
 | Strategy | Avg tokens to model | Avg tool calls |
 |----------|--------------------:|---------------:|
-| Raw full-repo dump | 21,781 | 1 |
-| grep + read matched files | 4,161 | 2.4 |
+| Raw full-repo dump | 21,887 | 1 |
+| grep + read matched files | 4,180 | 2.4 |
 | amdb (`--focus`, depth 1) | 3,972 | 1 |
 
 On a 31-file repo, grep is genuinely competitive on tokens — amdb's edge at this scale is one structured call instead of 2–4, with signatures, visibility, and resolver-accurate caller/callee attribution instead of raw text. The token gap widens with repo size: the dump grows linearly, grep grows with match noise, amdb's focus output grows with the size of the relevant interface.
@@ -150,6 +153,26 @@ ignore_patterns = ["target", ".git", "node_modules", ".amdb", ".fastembed_cache"
 `AMDB_DB_PATH` overrides `db_path`. Add `.database/` and `.amdb/` to your `.gitignore`.
 
 **Verbose** — `-v` / `--verbose` on any command for debug logs.
+
+## Stability
+
+amdb follows semantic versioning. 1.0.0 freezes the contract below; anything listed as covered changes only in a 2.0 release, and contract tests in `tests/contract_test.rs` fail loudly if it drifts.
+
+**Covered by the 1.0 promise:**
+
+- **CLI** — subcommands `init`, `daemon`, `generate`, `serve`; flags `--focus`/`-f`, `--depth`/`-d`, `--verbose`/`-v`; the optional path argument to `init` and `daemon`. Exit codes: 0 on success, 1 on unrecoverable error.
+- **MCP tools** — exactly `amdb_get_context`, `amdb_focus`, `amdb_get_symbol` with their current input parameters. `amdb_get_symbol` responses keep every current field with its current type: `file`, `name`, `kind`, `line`, `signature`, `is_public`, `callers[]` (`name`, `file`), `callees[]` (`name`, `file`, `resolution` ∈ `same-file` | `global-unique` | `unresolved`). New fields and new `resolution` values may be *added* in minor releases; existing ones are never renamed, removed, or retyped.
+- **Config** — `amdb.toml` keys `db_path` and `ignore_patterns`, and the `AMDB_DB_PATH` environment override. Unknown keys are ignored.
+- **Database upgrades** — the index schema is versioned via `PRAGMA user_version`. Any database written by amdb ≥ 0.6 opens without error and migrates automatically; the next `amdb init` rebuilds whatever the migration invalidated. Deleting `.database/` is a last-resort fallback, never a required upgrade step.
+- **Generated Markdown anchors** — two things in `generate` output are stable for scripts: each indexed file gets a heading line of exactly `### <relative/path>` (forward slashes, relative to the project root), and the dependency graph is a single fenced ` ```mermaid ` block containing `graph TD;` with `-->` edge lines.
+
+**Not covered (may change in any release):**
+
+- Every other detail of the Markdown layout: bullet and signature formatting, section ordering, mermaid node-id sanitization, header text.
+- Log and progress text on stdout/stderr.
+- The SQLite table layout and the vector-store file format (only automatic migration is promised, not the bytes).
+- The benchmark harness (`benchmark.py`) and its output format.
+- Internal Rust APIs — amdb is a binary crate; depending on its modules as a library is unsupported.
 
 ## License
 
