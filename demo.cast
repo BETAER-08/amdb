@@ -1,0 +1,11 @@
+{"version":3,"term":{"cols":228,"rows":16,"type":"xterm-256color"},"timestamp":1784881771,"command":"AMDB_BIN=./target/release/amdb ./scripts/demo.sh","env":{"SHELL":"/bin/bash"}}
+[0.00249, "o", "$ amdb init .\r\n"]
+[0.004812, "o", "\u001b[32m INFO\u001b[0m Initializing amdb in: .\r\n"]
+[0.000952, "o", "\u001b[32m INFO\u001b[0m Scanning files in ....\r\n"]
+[0.001588, "o", "\u001b[32m INFO\u001b[0m Files: 36 unchanged, 0 changed, 0 added, 0 removed\r\n\u001b[32m INFO\u001b[0m Indexing 0 files using 12 threads...\r\n\u001b[32m INFO\u001b[0m Embedding calls: 0\r\n"]
+[0.000089, "o", "\u001b[32m INFO\u001b[0m Project indexed successfully at .\r\n"]
+[0.000686, "o", "\r\n$ amdb serve\r\n"]
+[0.000008, "o", "  MCP client calls amdb_get_symbol with {\"name\": \"cosine_similarity\"}\r\n\r\n"]
+[1.003372, "o", "cosine_similarity — src/core/vector_store.rs:196\r\n  signature:  fn cosine_similarity(a: &[f32], b: &[f32]) -> f64\r\n  visibility: private\r\n  called by:  search (src/core/vector_store.rs)\r\n  calls:      iter, map, sqrt, sum, zip\r\n"]
+[0.003072, "o", "\r\nAnswer came from the local index. No network. No code left the machine.\r\n"]
+[0.000254, "x", "0"]

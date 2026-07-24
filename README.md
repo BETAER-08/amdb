@@ -4,6 +4,8 @@
   <img src="amdb.png" alt="amdb logo" width="60">
 </p>
 
+![amdb demo](demo.gif)
+
 ![Rust](https://img.shields.io/badge/built_with-Rust-dca282.svg)
 ![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
 
