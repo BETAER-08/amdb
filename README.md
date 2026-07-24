@@ -154,6 +154,16 @@ ignore_patterns = ["target", ".git", "node_modules", ".amdb", ".fastembed_cache"
 
 **Verbose** — `-v` / `--verbose` on any command for debug logs.
 
+**Docker** — the repo `Dockerfile` builds a slim image whose entrypoint is `amdb serve`, so the container speaks MCP over stdio immediately:
+
+```bash
+docker build -t amdb .
+docker run --rm -v "$PWD:/workspace" --entrypoint amdb amdb init .
+docker run -i --rm -v "$PWD:/workspace" amdb
+```
+
+The published `ghcr.io/betaer-08/amdb:1.0.0` image predates the serve entrypoint — it runs bare `amdb`, so pass the subcommand explicitly: `docker run -i --rm -v "$PWD:/workspace" -w /workspace ghcr.io/betaer-08/amdb:1.0.0 serve`. Images published from the next tag serve by default.
+
 ## Stability
 
 amdb follows semantic versioning. 1.0.0 freezes the contract below; anything listed as covered changes only in a 2.0 release, and contract tests in `tests/contract_test.rs` fail loudly if it drifts.

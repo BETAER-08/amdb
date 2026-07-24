@@ -1,0 +1,17 @@
+target/
+.git/
+.github/
+.database/
+.amdb/
+.fastembed_cache/
+.idea/
+.vscode/
+.claude/
+docs/
+scripts/
+amdb.png
+benchmark.md
+*.cast
+*.gif
+Dockerfile
+.dockerignore

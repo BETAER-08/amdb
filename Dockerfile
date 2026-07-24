@@ -8,6 +8,6 @@ RUN cargo build --release -j 2
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y ca-certificates libssl3 && rm -rf /var/lib/apt/lists/*
-WORKDIR /app
+WORKDIR /workspace
 COPY --from=builder /usr/src/amdb/target/release/amdb /usr/local/bin/amdb
-ENTRYPOINT ["amdb"]
+ENTRYPOINT ["amdb", "serve"]

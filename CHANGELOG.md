@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- `.dockerignore`, and a serving Docker entrypoint: the container image now starts the
+  MCP stdio server by default (`ENTRYPOINT ["amdb", "serve"]`, working directory
+  `/workspace`), matching what Glama's automated server check expects; run other
+  subcommands via `--entrypoint amdb`
+- `scripts/glama-check.sh` reproducing Glama's container check locally
+
 ## [1.0.0] 
 
 Stability release. No new features; the public contract is now frozen and covered by
