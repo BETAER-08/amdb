@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.0.0] - 2026-07-24
+## [1.0.0] 
 
 Stability release. No new features; the public contract is now frozen and covered by
 contract tests (`tests/contract_test.rs`). Breaking changes to anything listed under
